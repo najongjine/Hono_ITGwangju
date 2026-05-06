@@ -10,9 +10,10 @@ import supabaseTestRouter from "./routes/supabase_test_router.js";
 import testRouter from "./routes/test_router.js";
 
 const envFile =
-  process.env.NODE_ENV === "production"
+  process.env.ENV_FILE ??
+  (process.env.NODE_ENV === "production"
     ? ".env.production"
-    : ".env.development";
+    : ".env.development");
 dotenv.config({ path: envFile });
 
 const app = new Hono();

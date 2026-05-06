@@ -1,9 +1,10 @@
 import { CopyObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, GetObjectCommand, HeadObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client, } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import * as dotenv from "dotenv";
-const envFile = process.env.NODE_ENV === "production"
-    ? ".env.production"
-    : ".env.development";
+const envFile = process.env.ENV_FILE ??
+    (process.env.NODE_ENV === "production"
+        ? ".env.production"
+        : ".env.development");
 dotenv.config({ path: envFile });
 let storageClient = null;
 const getStorageEnv = () => {

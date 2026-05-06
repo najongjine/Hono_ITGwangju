@@ -1,10 +1,13 @@
 import * as dotenv from "dotenv";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import * as schema from "./schema.js";
-const envFile = process.env.NODE_ENV === "production"
-    ? ".env.production"
-    : ".env.development";
+import * as relations from "./relations.js";
+import * as tables from "./schema.js";
+const schema = { ...tables, ...relations };
+const envFile = process.env.ENV_FILE ??
+    (process.env.NODE_ENV === "production"
+        ? ".env.production"
+        : ".env.development");
 dotenv.config({ path: envFile });
 export const pool = new Pool({
     host: process.env.DB_HOST,

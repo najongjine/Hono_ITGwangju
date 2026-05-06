@@ -13,9 +13,10 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import * as dotenv from "dotenv";
 
 const envFile =
-  process.env.NODE_ENV === "production"
+  process.env.ENV_FILE ??
+  (process.env.NODE_ENV === "production"
     ? ".env.production"
-    : ".env.development";
+    : ".env.development");
 dotenv.config({ path: envFile });
 
 type FileBody = NonNullable<PutObjectCommandInput["Body"]>;
