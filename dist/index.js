@@ -15,7 +15,11 @@ const envFile = process.env.ENV_FILE ??
         : ".env.development");
 dotenv.config({ path: envFile });
 const app = new Hono();
-app.use(cors());
+app.use("*", cors({
+    origin: "*",
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization", "Accept", "Origin"],
+}));
 pool
     .connect()
     .then((client) => {
