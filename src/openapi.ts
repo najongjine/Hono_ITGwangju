@@ -21,6 +21,10 @@ export const openApiSpec = {
       name: "Supabase Storage",
       description: "Private bucket file CRUD with signed URLs",
     },
+    {
+      name: "Courses",
+      description: "Course and course session CRUD with course images",
+    },
   ],
   paths: {
     "/api/file/files": {
@@ -247,6 +251,271 @@ export const openApiSpec = {
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ApiResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/courses": {
+      get: {
+        tags: ["Courses"],
+        summary: "List courses",
+        description:
+          "Returns courses with thumbnail, description images, and sessions.",
+        parameters: [
+          {
+            name: "q",
+            in: "query",
+            required: false,
+            schema: { type: "string", example: "웹디자인" },
+          },
+          {
+            name: "includeDeleted",
+            in: "query",
+            required: false,
+            schema: { type: "boolean", default: false },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Course list",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/CourseListResponse" },
+              },
+            },
+          },
+        },
+      },
+      post: {
+        tags: ["Courses"],
+        summary: "Create or update a course",
+        description:
+          "If id is 0, inserts a course. If id is greater than 0, updates it. mainImage replaces thumbnailFileId only when attached. descriptionImages replace existing description image links only when attached.",
+        requestBody: {
+          required: true,
+          content: {
+            "multipart/form-data": {
+              schema: {
+                type: "object",
+                required: ["id", "courseName"],
+                properties: {
+                  id: {
+                    type: "integer",
+                    description: "0 for insert, existing id for update",
+                    example: 0,
+                  },
+                  courseName: { type: "string", example: "웹디자인 과정" },
+                  summary: {
+                    type: "string",
+                    example: "웹디자인 실무 중심 과정",
+                  },
+                  description: {
+                    type: "string",
+                    example: "포토샵, 일러스트, 웹 퍼블리싱 기초를 학습합니다.",
+                  },
+                  isVisible: { type: "boolean", default: true },
+                  status: { type: "string", default: "active" },
+                  sortOrder: { type: "integer", default: 0 },
+                  createdBy: { type: "integer", nullable: true },
+                  updatedBy: { type: "integer", nullable: true },
+                  mainImage: {
+                    type: "string",
+                    format: "binary",
+                    description:
+                      "Main course image. Also accepted as thumbnail or thumbnailFile.",
+                  },
+                  descriptionImages: {
+                    type: "array",
+                    items: { type: "string", format: "binary" },
+                    description:
+                      "Description images. Also accepted as descriptionImage or detailImages.",
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Saved course",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/CourseResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/courses/{id}": {
+      get: {
+        tags: ["Courses"],
+        summary: "Get a course",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "integer", example: 1 },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Course detail",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/CourseResponse" },
+              },
+            },
+          },
+        },
+      },
+      delete: {
+        tags: ["Courses"],
+        summary: "Soft delete a course",
+        description: "Updates status to deleted.",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "integer", example: 1 },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Deleted course row",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/CourseResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/courses/{courseId}/sessions": {
+      get: {
+        tags: ["Courses"],
+        summary: "List course sessions",
+        parameters: [
+          {
+            name: "courseId",
+            in: "path",
+            required: true,
+            schema: { type: "integer", example: 1 },
+          },
+          {
+            name: "includeDeleted",
+            in: "query",
+            required: false,
+            schema: { type: "boolean", default: false },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Course session list",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/CourseSessionListResponse",
+                },
+              },
+            },
+          },
+        },
+      },
+      post: {
+        tags: ["Courses"],
+        summary: "Create or update a course session",
+        description:
+          "If id is 0, inserts a session under courseId. If id is greater than 0, updates only the session that belongs to courseId.",
+        parameters: [
+          {
+            name: "courseId",
+            in: "path",
+            required: true,
+            schema: { type: "integer", example: 1 },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CourseSessionSaveRequest" },
+            },
+            "application/x-www-form-urlencoded": {
+              schema: { $ref: "#/components/schemas/CourseSessionSaveRequest" },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Saved course session",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/CourseSessionResponse" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/courses/{courseId}/sessions/{sessionId}": {
+      get: {
+        tags: ["Courses"],
+        summary: "Get a course session",
+        parameters: [
+          {
+            name: "courseId",
+            in: "path",
+            required: true,
+            schema: { type: "integer", example: 1 },
+          },
+          {
+            name: "sessionId",
+            in: "path",
+            required: true,
+            schema: { type: "integer", example: 1 },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Course session detail",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/CourseSessionResponse" },
+              },
+            },
+          },
+        },
+      },
+      delete: {
+        tags: ["Courses"],
+        summary: "Soft delete a course session",
+        description: "Updates status to deleted.",
+        parameters: [
+          {
+            name: "courseId",
+            in: "path",
+            required: true,
+            schema: { type: "integer", example: 1 },
+          },
+          {
+            name: "sessionId",
+            in: "path",
+            required: true,
+            schema: { type: "integer", example: 1 },
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Deleted course session row",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/CourseSessionResponse" },
               },
             },
           },
@@ -641,6 +910,157 @@ export const openApiSpec = {
           fileSize: { type: "integer", example: 12345 },
           createdAt: { type: "string", format: "date-time" },
         },
+      },
+      FileLink: {
+        type: "object",
+        properties: {
+          id: { type: "integer", example: 1 },
+          fileId: { type: "integer", example: 1 },
+          targetTable: { type: "string", example: "t_courses" },
+          targetId: { type: "integer", example: 1 },
+          fileRole: { type: "string", example: "description_image" },
+          sortOrder: { type: "integer", example: 0 },
+          createdAt: { type: "string", format: "date-time", nullable: true },
+          updatedAt: { type: "string", format: "date-time", nullable: true },
+        },
+      },
+      CourseImageLink: {
+        type: "object",
+        properties: {
+          link: { $ref: "#/components/schemas/FileLink" },
+          file: { $ref: "#/components/schemas/DbFileWithUrl" },
+        },
+      },
+      DbFileWithUrl: {
+        allOf: [
+          { $ref: "#/components/schemas/DbFile" },
+          {
+            type: "object",
+            properties: {
+              url: {
+                type: "string",
+                example: "/api/file/files/download?key=courses%2Fmain%2Fuuid.webp",
+              },
+            },
+          },
+        ],
+      },
+      Course: {
+        type: "object",
+        properties: {
+          id: { type: "integer", example: 1 },
+          courseName: { type: "string", example: "웹디자인 과정" },
+          summary: { type: "string", example: "웹디자인 실무 중심 과정" },
+          description: {
+            type: "string",
+            example: "포토샵, 일러스트, 웹 퍼블리싱 기초를 학습합니다.",
+          },
+          thumbnailFileId: { type: "integer", nullable: true, example: 10 },
+          isVisible: { type: "boolean", example: true },
+          status: { type: "string", example: "active" },
+          sortOrder: { type: "integer", example: 0 },
+          createdBy: { type: "integer", nullable: true },
+          updatedBy: { type: "integer", nullable: true },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" },
+          thumbnail: { $ref: "#/components/schemas/DbFileWithUrl" },
+          descriptionImages: {
+            type: "array",
+            items: { $ref: "#/components/schemas/CourseImageLink" },
+          },
+          sessions: {
+            type: "array",
+            items: { $ref: "#/components/schemas/CourseSession" },
+          },
+        },
+      },
+      CourseSession: {
+        type: "object",
+        properties: {
+          id: { type: "integer", example: 1 },
+          courseId: { type: "integer", example: 1 },
+          sessionName: { type: "string", example: "웹디자인 1기" },
+          sessionNo: { type: "integer", nullable: true, example: 1 },
+          startDate: { type: "string", format: "date", nullable: true },
+          endDate: { type: "string", format: "date", nullable: true },
+          applyStartDate: { type: "string", format: "date", nullable: true },
+          applyEndDate: { type: "string", format: "date", nullable: true },
+          capacity: { type: "integer", example: 20 },
+          location: { type: "string", example: "광주" },
+          status: { type: "string", example: "recruiting" },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" },
+        },
+      },
+      CourseSessionSaveRequest: {
+        type: "object",
+        required: ["id", "sessionName"],
+        properties: {
+          id: {
+            type: "integer",
+            description: "0 for insert, existing session id for update",
+            example: 0,
+          },
+          sessionName: { type: "string", example: "웹디자인 1기" },
+          sessionNo: { type: "integer", nullable: true, example: 1 },
+          startDate: { type: "string", format: "date", nullable: true },
+          endDate: { type: "string", format: "date", nullable: true },
+          applyStartDate: { type: "string", format: "date", nullable: true },
+          applyEndDate: { type: "string", format: "date", nullable: true },
+          capacity: { type: "integer", default: 0, example: 20 },
+          location: { type: "string", example: "광주" },
+          status: { type: "string", default: "recruiting" },
+        },
+      },
+      CourseResponse: {
+        allOf: [
+          { $ref: "#/components/schemas/ApiResponse" },
+          {
+            type: "object",
+            properties: {
+              data: { $ref: "#/components/schemas/Course" },
+            },
+          },
+        ],
+      },
+      CourseListResponse: {
+        allOf: [
+          { $ref: "#/components/schemas/ApiResponse" },
+          {
+            type: "object",
+            properties: {
+              data: {
+                type: "array",
+                items: { $ref: "#/components/schemas/Course" },
+              },
+            },
+          },
+        ],
+      },
+      CourseSessionResponse: {
+        allOf: [
+          { $ref: "#/components/schemas/ApiResponse" },
+          {
+            type: "object",
+            properties: {
+              data: { $ref: "#/components/schemas/CourseSession" },
+            },
+          },
+        ],
+      },
+      CourseSessionListResponse: {
+        allOf: [
+          { $ref: "#/components/schemas/ApiResponse" },
+          {
+            type: "object",
+            properties: {
+              data: {
+                type: "array",
+                items: { $ref: "#/components/schemas/CourseSession" },
+              },
+            },
+          },
+        ],
       },
       LocalUploadFilesResponse: {
         allOf: [

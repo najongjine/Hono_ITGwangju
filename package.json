@@ -1,5 +1,5 @@
 {
-  "name": "Hono_test1",
+  "name": "Hono_ITGwangju",
   "type": "module",
   "scripts": {
     "clean": "rimraf dist",
