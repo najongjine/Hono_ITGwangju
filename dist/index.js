@@ -33,7 +33,7 @@ app.get("/docs", swaggerUI({ url: "/openapi.json" }));
 app.get("/", async (c) => {
     let result = {
         success: true,
-        data: null,
+        data: process.env.ENV_FILE || "",
         code: "",
         message: ``,
     };

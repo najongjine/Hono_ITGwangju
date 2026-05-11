@@ -41,7 +41,7 @@ app.get("/docs", swaggerUI({ url: "/openapi.json" }));
 app.get("/", async (c) => {
   let result: { success: boolean; data: any; code: string; message: string } = {
     success: true,
-    data: null,
+    data: process.env.ENV_FILE || "",
     code: "",
     message: ``,
   };
@@ -55,8 +55,6 @@ app.get("/", async (c) => {
   }
 });
 
-
-
 app.route("/api/file", fileRouter);
 app.route("/api/courses", courseRouter);
 app.route("/api/supabase-test", supabaseTestRouter);
@@ -69,5 +67,5 @@ serve(
   },
   (info) => {
     console.log(`Server is running on http://localhost:${info.port}`);
-  }
+  },
 );
