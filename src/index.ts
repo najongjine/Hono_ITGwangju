@@ -31,10 +31,6 @@ pool
     console.error("Error during database pool initialization:", err);
   });
 
-app.get("/", (c) => {
-  return c.text("Hello Hono!");
-});
-
 app.get("/openapi.json", (c) => c.json(openApiSpec));
 app.get("/docs", swaggerUI({ url: "/openapi.json" }));
 
