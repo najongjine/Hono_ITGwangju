@@ -55,3 +55,30 @@ t_inquiries
 - 자바 개발자
 
 이정도만 추천
+
+
+
+
+
+
+
+
+
+
+
+------------------------
+
+"table_schema"	"table_name"	"columns"
+
+"public"	"t_apply"	"id integer NOT NULL, enrollment_id integer, user_id integer, session_id integer, applicant_name character varying NOT NULL, phone character varying NOT NULL, email character varying NOT NULL, birth_date date, gender character varying NOT NULL, address character varying NOT NULL, detail_address character varying NOT NULL, current_job character varying NOT NULL, education_level character varying NOT NULL, application_content text NOT NULL, privacy_agreed boolean NOT NULL, status character varying NOT NULL, created_at timestamp without time zone NOT NULL, updated_at timestamp without time zone NOT NULL"
+"public"	"t_course_sessions"	"id integer NOT NULL, course_id integer NOT NULL, session_name character varying NOT NULL, session_no integer, start_date date, end_date date, apply_start_date date, apply_end_date date, capacity integer NOT NULL, location character varying NOT NULL, status character varying NOT NULL, created_at timestamp without time zone NOT NULL, updated_at timestamp without time zone NOT NULL"
+"public"	"t_courses"	"id integer NOT NULL, course_name character varying NOT NULL, summary character varying NOT NULL, description text NOT NULL, thumbnail_file_id integer, is_visible boolean NOT NULL, status character varying NOT NULL, sort_order integer NOT NULL, created_by integer, updated_by integer, created_at timestamp without time zone NOT NULL, updated_at timestamp without time zone NOT NULL"
+"public"	"t_enrollments"	"id integer NOT NULL, user_id integer, course_id integer NOT NULL, session_id integer NOT NULL, applicant_name character varying NOT NULL, applicant_phone character varying NOT NULL, applicant_email character varying NOT NULL, apply_status character varying NOT NULL, approval_status character varying NOT NULL, memo text NOT NULL, applied_at timestamp without time zone NOT NULL, created_at timestamp without time zone NOT NULL, updated_at timestamp without time zone NOT NULL"
+"public"	"t_file_links"	"id integer NOT NULL, file_id integer NOT NULL, target_table character varying NOT NULL, target_id integer NOT NULL, file_role character varying, sort_order integer, created_at timestamp without time zone, updated_at timestamp without time zone"
+"public"	"t_files"	"id integer NOT NULL, original_name character varying, stored_name character varying, file_path character varying, mime_type character varying, file_size bigint, created_at timestamp without time zone, storage_type character varying, bucket character varying, storage_key character varying, public_url character varying, updated_at timestamp without time zone NOT NULL, uploaded_by integer, status character varying NOT NULL"
+"public"	"t_inquiries"	"id integer NOT NULL, user_id integer, name character varying NOT NULL, phone character varying NOT NULL, email character varying NOT NULL, title character varying NOT NULL, content text NOT NULL, answer text NOT NULL, answered_by integer, answered_at timestamp without time zone, status character varying NOT NULL, created_at timestamp without time zone NOT NULL, updated_at timestamp without time zone NOT NULL"
+"public"	"t_notices"	"id integer NOT NULL, title character varying NOT NULL, content text NOT NULL, author_id integer, author_name character varying NOT NULL, view_count integer NOT NULL, is_visible boolean NOT NULL, is_pinned boolean NOT NULL, status character varying NOT NULL, published_at timestamp without time zone, created_at timestamp without time zone NOT NULL, updated_at timestamp without time zone NOT NULL"
+"public"	"t_posts"	"id integer NOT NULL, category character varying NOT NULL, title character varying NOT NULL, content text NOT NULL, author_id integer, author_name character varying NOT NULL, view_count integer NOT NULL, is_visible boolean NOT NULL, status character varying NOT NULL, created_at timestamp without time zone NOT NULL, updated_at timestamp without time zone NOT NULL"
+"public"	"t_test1"	"id integer NOT NULL, title character varying, content character varying, created_dt timestamp with time zone"
+"public"	"t_test1_child"	"id integer NOT NULL, comment character varying, created_dt timestamp with time zone, test1_id integer"
+"public"	"t_user"	"id integer NOT NULL, provider character varying NOT NULL, provider_user_id character varying NOT NULL, email character varying NOT NULL, name character varying NOT NULL, profile_image_url character varying NOT NULL, role character varying NOT NULL, status character varying NOT NULL, last_login_at timestamp without time zone, created_at timestamp without time zone NOT NULL, updated_at timestamp without time zone NOT NULL"
