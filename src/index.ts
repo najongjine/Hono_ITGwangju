@@ -41,12 +41,14 @@ app.get("/docs", swaggerUI({ url: "/openapi.json" }));
 app.get("/", async (c) => {
   let result: { success: boolean; data: any; code: string; message: string } = {
     success: true,
-    data: process.env.ENV_FILE || "",
+    data: null,
     code: "",
     message: ``,
   };
   try {
     const q = String(c.req.query("q") ?? "");
+    const env = process.env.NODE_ENV || "";
+    result.data = env;
     return c.json(result);
   } catch (error: any) {
     result.success = false;
