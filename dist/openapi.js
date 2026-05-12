@@ -968,7 +968,7 @@ export const openApiSpec = {
                 properties: {
                     id: { type: "integer", example: 1 },
                     courseId: { type: "integer", example: 1 },
-                    sessionName: { type: "string", example: "웹디자인 1기" },
+                    sessionName: { type: "string", nullable: true, example: "웹디자인 1기" },
                     sessionNo: { type: "integer", nullable: true, example: 1 },
                     startDate: { type: "string", format: "date", nullable: true },
                     endDate: { type: "string", format: "date", nullable: true },
@@ -982,20 +982,20 @@ export const openApiSpec = {
             },
             CourseSessionSaveRequest: {
                 type: "object",
-                required: ["id", "sessionName"],
+                required: ["id"],
                 properties: {
                     id: {
                         type: "integer",
                         description: "0 for insert, existing session id for update",
                         example: 0,
                     },
-                    sessionName: { type: "string", example: "웹디자인 1기" },
+                    sessionName: { type: "string", nullable: true, example: "웹디자인 1기" },
                     sessionNo: { type: "integer", nullable: true, example: 1 },
                     startDate: { type: "string", format: "date", nullable: true },
                     endDate: { type: "string", format: "date", nullable: true },
                     classStartTime: { type: "string", format: "time", nullable: true, example: "09:00" },
                     classEndTime: { type: "string", format: "time", nullable: true, example: "18:00" },
-                    capacity: { type: "integer", default: 0, example: 20 },
+                    capacity: { type: "integer", nullable: true, default: 20, example: 20 },
                     status: { type: "string", default: "recruiting" },
                 },
             },

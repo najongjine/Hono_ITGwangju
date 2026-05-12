@@ -162,20 +162,17 @@ router.post("/:courseId/sessions", async (c) => {
             }
         }
         const sessionNo = Number(inputValue("sessionNo", "session_no"));
-        const capacity = Number(inputValue("capacity") ?? 0);
+        const capacity = Number(inputValue("capacity") ?? 20);
         const payload = {
-            sessionName: String(inputValue("sessionName", "session_name") ?? "").trim(),
+            sessionName: String(inputValue("sessionName", "session_name") ?? "").trim() || null,
             sessionNo: Number.isFinite(sessionNo) && sessionNo > 0 ? sessionNo : null,
             startDate: String(inputValue("startDate", "start_date") ?? "").trim() || null,
             endDate: String(inputValue("endDate", "end_date") ?? "").trim() || null,
             classStartTime: String(inputValue("classStartTime", "class_start_time") ?? "").trim() || null,
             classEndTime: String(inputValue("classEndTime", "class_end_time") ?? "").trim() || null,
-            capacity: Number.isFinite(capacity) ? capacity : 0,
+            capacity: Number.isFinite(capacity) ? capacity : 20,
             status: String(inputValue("status") ?? "recruiting"),
         };
-        if (!payload.sessionName) {
-            return c.json(fail(c, new Error("sessionName is required")));
-        }
         const now = new Date().toISOString();
         const rows = id === 0
             ? await db
