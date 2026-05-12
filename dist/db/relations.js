@@ -1,6 +1,15 @@
 import { relations } from "drizzle-orm/relations";
-import { tUser, tCourses, tFiles, tCourseSessions, tEnrollments, tApply, tNotices, tPosts, tTest1, tTest1Child, tInquiries, tFileLinks } from "./schema.js";
+import { tCourses, tCourseSessions, tUser, tFiles, tEnrollments, tApply, tNotices, tPosts, tTest1, tTest1Child, tInquiries, tFileLinks, tUserRoles } from "./schema.js";
+export const tCourseSessionsRelations = relations(tCourseSessions, ({ one, many }) => ({
+    tCourse: one(tCourses, {
+        fields: [tCourseSessions.courseId],
+        references: [tCourses.id]
+    }),
+    tEnrollments: many(tEnrollments),
+    tApplies: many(tApply),
+}));
 export const tCoursesRelations = relations(tCourses, ({ one, many }) => ({
+    tCourseSessions: many(tCourseSessions),
     tUser_createdBy: one(tUser, {
         fields: [tCourses.createdBy],
         references: [tUser.id],
@@ -15,7 +24,6 @@ export const tCoursesRelations = relations(tCourses, ({ one, many }) => ({
         references: [tUser.id],
         relationName: "tCourses_updatedBy_tUser_id"
     }),
-    tCourseSessions: many(tCourseSessions),
     tEnrollments: many(tEnrollments),
 }));
 export const tUserRelations = relations(tUser, ({ many }) => ({
@@ -36,6 +44,7 @@ export const tUserRelations = relations(tUser, ({ many }) => ({
         relationName: "tInquiries_userId_tUser_id"
     }),
     tFiles: many(tFiles),
+    tUserRoles: many(tUserRoles),
 }));
 export const tFilesRelations = relations(tFiles, ({ one, many }) => ({
     tCourses: many(tCourses),
@@ -44,14 +53,6 @@ export const tFilesRelations = relations(tFiles, ({ one, many }) => ({
         references: [tUser.id]
     }),
     tFileLinks: many(tFileLinks),
-}));
-export const tCourseSessionsRelations = relations(tCourseSessions, ({ one, many }) => ({
-    tCourse: one(tCourses, {
-        fields: [tCourseSessions.courseId],
-        references: [tCourses.id]
-    }),
-    tEnrollments: many(tEnrollments),
-    tApplies: many(tApply),
 }));
 export const tEnrollmentsRelations = relations(tEnrollments, ({ one, many }) => ({
     tCourse: one(tCourses, {
@@ -119,5 +120,11 @@ export const tFileLinksRelations = relations(tFileLinks, ({ one }) => ({
     tFile: one(tFiles, {
         fields: [tFileLinks.fileId],
         references: [tFiles.id]
+    }),
+}));
+export const tUserRolesRelations = relations(tUserRoles, ({ one }) => ({
+    tUser: one(tUser, {
+        fields: [tUserRoles.userId],
+        references: [tUser.id]
     }),
 }));

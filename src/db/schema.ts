@@ -1,38 +1,44 @@
-import { pgTable, unique, serial, varchar, timestamp, index, foreignKey, text, integer, boolean, date, bigint } from "drizzle-orm/pg-core"
+import { pgTable, index, foreignKey, serial, integer, varchar, date, timestamp, time, text, boolean, unique, bigint } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 
 
 
-export const tUser = pgTable("t_user", {
+export const tCourseSessions = pgTable("t_course_sessions", {
 	id: serial().primaryKey().notNull(),
-	provider: varchar().default('google').notNull(),
-	providerUserId: varchar("provider_user_id").notNull(),
-	email: varchar().notNull(),
-	name: varchar().default("").notNull(),
-	profileImageUrl: varchar("profile_image_url").default("").notNull(),
-	role: varchar().default('user').notNull(),
-	status: varchar().default('active').notNull(),
-	lastLoginAt: timestamp("last_login_at", { mode: 'string' }),
-	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
-	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
+	courseId: integer("course_id").notNull(),
+	sessionName: varchar("session_name"),
+	sessionNo: integer("session_no"),
+	startDate: date("start_date"),
+	endDate: date("end_date"),
+	capacity: integer().default(20),
+	status: varchar().default('recruiting'),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
+	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
+	classStartTime: time("class_start_time"),
+	classEndTime: time("class_end_time"),
 }, (table) => [
-	unique("t_user_provider_user_id_uk").on(table.provider, table.providerUserId),
-	unique("t_user_email_uk").on(table.email),
+	index("idx_t_course_sessions_course_id").using("btree", table.courseId.asc().nullsLast().op("int4_ops")),
+	index("idx_t_course_sessions_status").using("btree", table.status.asc().nullsLast().op("text_ops")),
+	foreignKey({
+			columns: [table.courseId],
+			foreignColumns: [tCourses.id],
+			name: "t_course_sessions_course_id_fkey"
+		}).onDelete("cascade"),
 ]);
 
 export const tCourses = pgTable("t_courses", {
 	id: serial().primaryKey().notNull(),
 	courseName: varchar("course_name").notNull(),
-	summary: varchar().default("").notNull(),
-	description: text().default("").notNull(),
+	summary: varchar().default(""),
+	description: text().default(""),
 	thumbnailFileId: integer("thumbnail_file_id"),
-	isVisible: boolean("is_visible").default(true).notNull(),
-	status: varchar().default('active').notNull(),
-	sortOrder: integer("sort_order").default(0).notNull(),
+	isVisible: boolean("is_visible").default(true),
+	status: varchar().default('active'),
+	sortOrder: integer("sort_order").default(0),
 	createdBy: integer("created_by"),
 	updatedBy: integer("updated_by"),
-	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
-	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
+	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
 }, (table) => [
 	index("idx_t_courses_visible_status").using("btree", table.isVisible.asc().nullsLast().op("text_ops"), table.status.asc().nullsLast().op("text_ops")),
 	foreignKey({
@@ -52,28 +58,25 @@ export const tCourses = pgTable("t_courses", {
 		}).onDelete("set null"),
 ]);
 
-export const tCourseSessions = pgTable("t_course_sessions", {
+export const tUser = pgTable("t_user", {
 	id: serial().primaryKey().notNull(),
-	courseId: integer("course_id").notNull(),
-	sessionName: varchar("session_name").notNull(),
-	sessionNo: integer("session_no"),
-	startDate: date("start_date"),
-	endDate: date("end_date"),
-	applyStartDate: date("apply_start_date"),
-	applyEndDate: date("apply_end_date"),
-	capacity: integer().default(0).notNull(),
-	location: varchar().default("").notNull(),
-	status: varchar().default('recruiting').notNull(),
-	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
-	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
+	provider: varchar().default('google'),
+	providerUserId: varchar("provider_user_id"),
+	email: varchar(),
+	name: varchar().default(""),
+	profileImageUrl: varchar("profile_image_url").default(""),
+	role: varchar().default('user'),
+	status: varchar().default('active'),
+	lastLoginAt: timestamp("last_login_at", { mode: 'string' }),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
+	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
+	username: varchar({ length: 255 }),
+	password: varchar(),
+	realName: varchar("real_name", { length: 255 }),
+	phone: varchar(),
 }, (table) => [
-	index("idx_t_course_sessions_course_id").using("btree", table.courseId.asc().nullsLast().op("int4_ops")),
-	index("idx_t_course_sessions_status").using("btree", table.status.asc().nullsLast().op("text_ops")),
-	foreignKey({
-			columns: [table.courseId],
-			foreignColumns: [tCourses.id],
-			name: "t_course_sessions_course_id_fkey"
-		}).onDelete("cascade"),
+	unique("t_user_provider_user_id_uk").on(table.provider, table.providerUserId),
+	unique("t_user_email_uk").on(table.email),
 ]);
 
 export const tEnrollments = pgTable("t_enrollments", {
@@ -283,4 +286,17 @@ export const tFileLinks = pgTable("t_file_links", {
 			name: "t_file_links_file_id_fkey"
 		}).onDelete("cascade"),
 	unique("t_file_links_target_uk").on(table.fileId, table.targetTable, table.targetId, table.fileRole),
+]);
+
+export const tUserRoles = pgTable("t_user_roles", {
+	id: serial().primaryKey().notNull(),
+	userId: integer("user_id").notNull(),
+	roleName: varchar("role_name", { length: 250 }),
+	createdAt: timestamp("created_at", { mode: 'string' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+	foreignKey({
+			columns: [table.userId],
+			foreignColumns: [tUser.id],
+			name: "fk_user_roles_user"
+		}).onDelete("cascade"),
 ]);

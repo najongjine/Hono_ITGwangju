@@ -9,6 +9,7 @@ import courseRouter from "./routes/course_router.js";
 import fileRouter from "./routes/file_router.js";
 import supabaseTestRouter from "./routes/supabase_test_router.js";
 import testRouter from "./routes/test_router.js";
+import userRouter from "./routes/user_router.js";
 
 const envFile =
   process.env.ENV_FILE ??
@@ -64,6 +65,7 @@ app.route("/api/file", fileRouter);
 app.route("/api/courses", courseRouter);
 app.route("/api/supabase-test", supabaseTestRouter);
 app.route("/api/test", testRouter);
+app.route("/api/user", userRouter);
 
 serve(
   {
