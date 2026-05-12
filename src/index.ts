@@ -7,6 +7,8 @@ import { pool } from "./db/index.js";
 import { openApiSpec } from "./openapi.js";
 import courseRouter from "./routes/course_router.js";
 import fileRouter from "./routes/file_router.js";
+import inquiryRouter from "./routes/inquiry_router.js";
+import noticeRouter from "./routes/notice_router.js";
 import supabaseTestRouter from "./routes/supabase_test_router.js";
 import testRouter from "./routes/test_router.js";
 import userRouter from "./routes/user_router.js";
@@ -63,6 +65,8 @@ app.get("/", async (c) => {
 
 app.route("/api/file", fileRouter);
 app.route("/api/courses", courseRouter);
+app.route("/api/inquiries", inquiryRouter);
+app.route("/api/notices", noticeRouter);
 app.route("/api/supabase-test", supabaseTestRouter);
 app.route("/api/test", testRouter);
 app.route("/api/user", userRouter);

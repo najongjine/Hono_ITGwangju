@@ -25,8 +25,41 @@ export const openApiSpec = {
       name: "Courses",
       description: "Course and course session CRUD with course images",
     },
+    {
+      name: "Users",
+      description: "User authentication and administrator account management",
+    },
   ],
   paths: {
+    "/api/user/admin/password-reset": {
+      post: {
+        tags: ["Users"],
+        summary: "Force reset a user password",
+        description:
+          "Admin-only endpoint. Finds a user by id, username/loginId, or email. If a new password is omitted, a temporary password is generated and returned.",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  userId: { type: "integer", example: 12 },
+                  identifier: { type: "string", example: "student01" },
+                  newPassword: { type: "string", minLength: 8, example: "TempPass1234" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Updated user and generated temporary password when applicable",
+          },
+        },
+      },
+    },
     "/api/file/files": {
       get: {
         tags: ["Local Files"],
@@ -814,6 +847,13 @@ export const openApiSpec = {
     },
   },
   components: {
+    securitySchemes: {
+      bearerAuth: {
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "JWT",
+      },
+    },
     responses: {
       Error: {
         description: "API error",

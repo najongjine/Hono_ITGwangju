@@ -36,6 +36,13 @@
       "when": 1778594100000,
       "tag": "0004_split_class_time",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1778594200000,
+      "tag": "0005_drop_user_name",
+      "breakpoints": true
     }
   ]
 }

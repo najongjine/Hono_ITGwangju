@@ -88,7 +88,6 @@ export const toSafeUser = (user) => {
     const { password, ...safeUser } = user;
     return {
         ...safeUser,
-        name: decryptPersonalData(safeUser.name),
         realName: decryptPersonalData(safeUser.realName),
         phone: decryptPersonalData(safeUser.phone),
     };
