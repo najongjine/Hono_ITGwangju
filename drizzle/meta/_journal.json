@@ -43,6 +43,13 @@
       "when": 1778594200000,
       "tag": "0005_drop_user_name",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1778640000000,
+      "tag": "0006_inquiry_replies",
+      "breakpoints": true
     }
   ]
 }

@@ -28,6 +28,36 @@ const ok = (data: unknown = null, message = "") => ({
 
 const getApiName = (c: Context) => `${c.req.method} ${new URL(c.req.url).pathname}`;
 
+const parseIntegerListValue = (value: FormDataEntryValue): number[] => {
+  const text = String(value).trim();
+  if (!text) {
+    return [];
+  }
+
+  if (text.startsWith("[") && text.endsWith("]")) {
+    try {
+      const parsed = JSON.parse(text);
+      return Array.isArray(parsed)
+        ? parsed.flatMap((item) => parseIntegerListValue(String(item)))
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
+  return text
+    .split(",")
+    .map((value) => Number(String(value).trim()))
+    .filter((value) => Number.isFinite(value))
+    .map((value) => Math.floor(value));
+};
+
+const parseIntegerList = (values: FormDataEntryValue[]) =>
+  values.flatMap(parseIntegerListValue);
+
+const getFormIntegerList = (form: FormData, names: string[]) =>
+  parseIntegerList(names.flatMap((name) => form.getAll(name)));
+
 const fail = (c: Context, error: unknown) => ({
   success: false,
   data: null,
@@ -365,6 +395,18 @@ router.post("/", async (c) => {
       ...form.getAll("descriptionImage"),
       ...form.getAll("detailImages"),
     ].filter((item): item is File => item instanceof File && item.size > 0);
+    const descriptionImageOrders = getFormIntegerList(form, [
+      "descriptionImageOrders",
+      "descriptionImageOrder",
+      "description_image_orders",
+      "description_image_order",
+      "detailImageOrders",
+      "detail_image_orders",
+      "imageOrders",
+      "image_orders",
+      "sortOrders",
+      "sort_orders",
+    ]);
     const sortOrder = Number(form.get("sortOrder") ?? form.get("sort_order") ?? 0);
     const createdBy = Number(form.get("createdBy") ?? form.get("created_by"));
     const updatedBy = Number(form.get("updatedBy") ?? form.get("updated_by"));
@@ -409,11 +451,17 @@ router.post("/", async (c) => {
       mainImages.length > 0
         ? await uploadCourseImage(mainImages[0], "courses/main")
         : null;
-    const uploadedDescriptionImages: CourseImageFile[] = [];
-    for (const image of descriptionImages) {
+    const uploadedDescriptionImages: {
+      file: CourseImageFile;
+      sortOrder: number;
+    }[] = [];
+    for (const [index, image] of descriptionImages.entries()) {
       const uploaded = await uploadCourseImage(image, "courses/descriptions");
       if (uploaded) {
-        uploadedDescriptionImages.push(uploaded);
+        uploadedDescriptionImages.push({
+          file: uploaded,
+          sortOrder: descriptionImageOrders[index] ?? index,
+        });
       }
     }
 
@@ -466,12 +514,12 @@ router.post("/", async (c) => {
             )
           );
         await tx.insert(tFileLinks).values(
-          uploadedDescriptionImages.map((file, index) => ({
+          uploadedDescriptionImages.map(({ file, sortOrder }) => ({
             fileId: file.id,
             targetTable: COURSE_TABLE,
             targetId: course.id,
             fileRole: DESCRIPTION_IMAGE_ROLE,
-            sortOrder: index,
+            sortOrder,
           }))
         );
       }

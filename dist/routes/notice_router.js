@@ -9,6 +9,18 @@ const router = new Hono();
 const MODULE_NAME = "notice_router";
 const NOTICE_TABLE = "t_notices";
 const NOTICE_IMAGE_ROLE = "notice_image";
+const NOTICE_IMAGE_ORDER_FIELDS = [
+    "imageOrders",
+    "imageOrder",
+    "image_orders",
+    "image_order",
+    "noticeImageOrders",
+    "notice_image_orders",
+    "fileOrders",
+    "file_orders",
+    "sortOrders",
+    "sort_orders",
+];
 const ok = (data = null, message = "") => ({
     success: true,
     data,
@@ -46,6 +58,37 @@ const readString = (input, names, fallback = "") => {
         }
     }
     return fallback;
+};
+const parseIntegerListValue = (value) => {
+    if (value === undefined || value === null || value instanceof File) {
+        return [];
+    }
+    if (Array.isArray(value)) {
+        return value.flatMap(parseIntegerListValue);
+    }
+    const text = String(value).trim();
+    if (!text) {
+        return [];
+    }
+    if (text.startsWith("[") && text.endsWith("]")) {
+        try {
+            return parseIntegerListValue(JSON.parse(text));
+        }
+        catch {
+            return [];
+        }
+    }
+    return text
+        .split(",")
+        .map((item) => Number(item.trim()))
+        .filter((item) => Number.isFinite(item))
+        .map((item) => Math.floor(item));
+};
+const readIntegerList = (input, names) => {
+    const values = input instanceof FormData
+        ? names.flatMap((name) => input.getAll(name))
+        : names.map((name) => input[name]);
+    return values.flatMap(parseIntegerListValue);
 };
 const requireAdminUser = async (c) => {
     const user = await verifyUserToken(c.req.header("authorization") ?? "");
@@ -128,7 +171,7 @@ const parseExistingImageIds = (input) => {
         .filter((value) => Number.isFinite(value) && value > 0)
         .map((value) => Math.floor(value));
 };
-const saveNoticeImages = async (noticeId, files, existingImageIds, uploadedBy) => {
+const saveNoticeImages = async (noticeId, files, existingImageIds, uploadedBy, imageOrders = []) => {
     if (files.length === 0 && existingImageIds.length === 0) {
         return;
     }
@@ -153,7 +196,7 @@ const saveNoticeImages = async (noticeId, files, existingImageIds, uploadedBy) =
                 targetTable: NOTICE_TABLE,
                 targetId: noticeId,
                 fileRole: NOTICE_IMAGE_ROLE,
-                sortOrder: index,
+                sortOrder: imageOrders[index] ?? index,
             })));
         }
     });
@@ -277,7 +320,7 @@ router.post("/", async (c) => {
         if (!saved) {
             return c.json(fail(c, new Error("failed to save notice")));
         }
-        await saveNoticeImages(saved.id, input instanceof FormData ? getFormFiles(input) : [], parseExistingImageIds(input), admin.id);
+        await saveNoticeImages(saved.id, input instanceof FormData ? getFormFiles(input) : [], parseExistingImageIds(input), admin.id, readIntegerList(input, NOTICE_IMAGE_ORDER_FIELDS));
         return c.json(ok({ ...saved, images: await getNoticeImages(saved.id) }));
     }
     catch (error) {
@@ -320,7 +363,7 @@ router.put("/:id", async (c) => {
         })
             .where(eq(tNotices.id, id))
             .returning())[0];
-        await saveNoticeImages(id, input instanceof FormData ? getFormFiles(input) : [], parseExistingImageIds(input), admin.id);
+        await saveNoticeImages(id, input instanceof FormData ? getFormFiles(input) : [], parseExistingImageIds(input), admin.id, readIntegerList(input, NOTICE_IMAGE_ORDER_FIELDS));
         return c.json(ok({ ...saved, images: await getNoticeImages(id) }));
     }
     catch (error) {
@@ -358,7 +401,7 @@ router.patch("/:id", async (c) => {
         })
             .where(eq(tNotices.id, id))
             .returning())[0];
-        await saveNoticeImages(id, input instanceof FormData ? getFormFiles(input) : [], parseExistingImageIds(input), admin.id);
+        await saveNoticeImages(id, input instanceof FormData ? getFormFiles(input) : [], parseExistingImageIds(input), admin.id, readIntegerList(input, NOTICE_IMAGE_ORDER_FIELDS));
         return c.json(ok({ ...saved, images: await getNoticeImages(id) }));
     }
     catch (error) {

@@ -229,6 +229,28 @@ export const tInquiries = pgTable("t_inquiries", {
         name: "t_inquiries_user_id_fkey"
     }).onDelete("set null"),
 ]);
+export const tInquiryReplies = pgTable("t_inquiry_replies", {
+    id: serial().primaryKey().notNull(),
+    inquiryId: integer("inquiry_id").notNull(),
+    userId: integer("user_id"),
+    authorRole: varchar("author_role").default('user').notNull(),
+    content: text().default("").notNull(),
+    status: varchar().default('active').notNull(),
+    createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+    index("idx_t_inquiry_replies_inquiry_id").using("btree", table.inquiryId.asc().nullsLast().op("int4_ops")),
+    foreignKey({
+        columns: [table.inquiryId],
+        foreignColumns: [tInquiries.id],
+        name: "t_inquiry_replies_inquiry_id_fkey"
+    }).onDelete("cascade"),
+    foreignKey({
+        columns: [table.userId],
+        foreignColumns: [tUser.id],
+        name: "t_inquiry_replies_user_id_fkey"
+    }).onDelete("set null"),
+]);
 export const tFiles = pgTable("t_files", {
     id: integer().primaryKey().generatedAlwaysAsIdentity({ name: "t_files_id_seq", startWith: 1, increment: 1, minValue: 1, maxValue: 2147483647, cache: 1 }),
     originalName: varchar("original_name").default(""),

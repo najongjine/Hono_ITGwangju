@@ -365,6 +365,13 @@ export const openApiSpec = {
                     description:
                       "Description images. Also accepted as descriptionImage or detailImages.",
                   },
+                  descriptionImageOrders: {
+                    type: "array",
+                    items: { type: "integer" },
+                    description:
+                      "Sort order values for descriptionImages. Also accepted as imageOrders or sortOrders. Falls back to upload order.",
+                    example: [0, 1, 2],
+                  },
                 },
               },
             },

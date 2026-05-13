@@ -10,6 +10,18 @@ const router = new Hono();
 const MODULE_NAME = "notice_router";
 const NOTICE_TABLE = "t_notices";
 const NOTICE_IMAGE_ROLE = "notice_image";
+const NOTICE_IMAGE_ORDER_FIELDS = [
+  "imageOrders",
+  "imageOrder",
+  "image_orders",
+  "image_order",
+  "noticeImageOrders",
+  "notice_image_orders",
+  "fileOrders",
+  "file_orders",
+  "sortOrders",
+  "sort_orders",
+];
 
 const ok = (data: unknown = null, message = "") => ({
   success: true,
@@ -58,6 +70,46 @@ const readString = (
   }
 
   return fallback;
+};
+
+const parseIntegerListValue = (value: unknown): number[] => {
+  if (value === undefined || value === null || value instanceof File) {
+    return [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap(parseIntegerListValue);
+  }
+
+  const text = String(value).trim();
+  if (!text) {
+    return [];
+  }
+
+  if (text.startsWith("[") && text.endsWith("]")) {
+    try {
+      return parseIntegerListValue(JSON.parse(text));
+    } catch {
+      return [];
+    }
+  }
+
+  return text
+    .split(",")
+    .map((item) => Number(item.trim()))
+    .filter((item) => Number.isFinite(item))
+    .map((item) => Math.floor(item));
+};
+
+const readIntegerList = (
+  input: Record<string, unknown> | FormData,
+  names: string[]
+) => {
+  const values =
+    input instanceof FormData
+      ? names.flatMap((name) => input.getAll(name))
+      : names.map((name) => input[name]);
+
+  return values.flatMap(parseIntegerListValue);
 };
 
 const requireAdminUser = async (c: Context) => {
@@ -171,7 +223,8 @@ const saveNoticeImages = async (
   noticeId: number,
   files: File[],
   existingImageIds: number[],
-  uploadedBy: number | null
+  uploadedBy: number | null,
+  imageOrders: number[] = []
 ) => {
   if (files.length === 0 && existingImageIds.length === 0) {
     return;
@@ -208,7 +261,7 @@ const saveNoticeImages = async (
           targetTable: NOTICE_TABLE,
           targetId: noticeId,
           fileRole: NOTICE_IMAGE_ROLE,
-          sortOrder: index,
+          sortOrder: imageOrders[index] ?? index,
         }))
       );
     }
@@ -368,7 +421,8 @@ router.post("/", async (c) => {
       saved.id,
       input instanceof FormData ? getFormFiles(input) : [],
       parseExistingImageIds(input),
-      admin.id
+      admin.id,
+      readIntegerList(input, NOTICE_IMAGE_ORDER_FIELDS)
     );
 
     return c.json(ok({ ...saved, images: await getNoticeImages(saved.id) }));
@@ -433,7 +487,8 @@ router.put("/:id", async (c) => {
       id,
       input instanceof FormData ? getFormFiles(input) : [],
       parseExistingImageIds(input),
-      admin.id
+      admin.id,
+      readIntegerList(input, NOTICE_IMAGE_ORDER_FIELDS)
     );
 
     return c.json(ok({ ...saved, images: await getNoticeImages(id) }));
@@ -492,7 +547,8 @@ router.patch("/:id", async (c) => {
       id,
       input instanceof FormData ? getFormFiles(input) : [],
       parseExistingImageIds(input),
-      admin.id
+      admin.id,
+      readIntegerList(input, NOTICE_IMAGE_ORDER_FIELDS)
     );
 
     return c.json(ok({ ...saved, images: await getNoticeImages(id) }));
