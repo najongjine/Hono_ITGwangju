@@ -5,6 +5,7 @@ import { cors } from "hono/cors";
 import * as dotenv from "dotenv";
 import { pool } from "./db/index.js";
 import { openApiSpec } from "./openapi.js";
+import bannerRouter from "./routes/banner_router.js";
 import courseRouter from "./routes/course_router.js";
 import fileRouter from "./routes/file_router.js";
 import inquiryRouter from "./routes/inquiry_router.js";
@@ -54,6 +55,7 @@ app.get("/", async (c) => {
     }
 });
 app.route("/api/file", fileRouter);
+app.route("/api/banners", bannerRouter);
 app.route("/api/courses", courseRouter);
 app.route("/api/inquiries", inquiryRouter);
 app.route("/api/notices", noticeRouter);

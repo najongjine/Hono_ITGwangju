@@ -58,6 +58,44 @@ export const tCourses = pgTable("t_courses", {
 		}).onDelete("set null"),
 ]);
 
+export const tBanner = pgTable("t_banner", {
+	id: serial().primaryKey().notNull(),
+	title: varchar().default("").notNull(),
+	subtitle: varchar().default("").notNull(),
+	description: text().default("").notNull(),
+	imageFileId: integer("image_file_id"),
+	linkUrl: varchar("link_url").default("").notNull(),
+	linkTarget: varchar("link_target").default("_self").notNull(),
+	position: varchar().default("main").notNull(),
+	isVisible: boolean("is_visible").default(true).notNull(),
+	status: varchar().default("active").notNull(),
+	sortOrder: integer("sort_order").default(0).notNull(),
+	startAt: timestamp("start_at", { mode: "string" }),
+	endAt: timestamp("end_at", { mode: "string" }),
+	createdBy: integer("created_by"),
+	updatedBy: integer("updated_by"),
+	createdAt: timestamp("created_at", { mode: "string" }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { mode: "string" }).defaultNow().notNull(),
+}, (table) => [
+	index("idx_t_banner_position_visible").using("btree", table.position.asc().nullsLast().op("text_ops"), table.isVisible.asc().nullsLast().op("bool_ops"), table.status.asc().nullsLast().op("text_ops")),
+	index("idx_t_banner_sort_order").using("btree", table.sortOrder.asc().nullsLast().op("int4_ops"), table.createdAt.desc().nullsFirst().op("timestamp_ops")),
+	foreignKey({
+			columns: [table.createdBy],
+			foreignColumns: [tUser.id],
+			name: "t_banner_created_by_fkey"
+		}).onDelete("set null"),
+	foreignKey({
+			columns: [table.imageFileId],
+			foreignColumns: [tFiles.id],
+			name: "t_banner_image_file_id_fkey"
+		}).onDelete("set null"),
+	foreignKey({
+			columns: [table.updatedBy],
+			foreignColumns: [tUser.id],
+			name: "t_banner_updated_by_fkey"
+		}).onDelete("set null"),
+]);
+
 export const tUser = pgTable("t_user", {
 	id: serial().primaryKey().notNull(),
 	provider: varchar().default('google'),

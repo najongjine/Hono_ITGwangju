@@ -50,6 +50,13 @@
       "when": 1778640000000,
       "tag": "0006_inquiry_replies",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1778641200000,
+      "tag": "0007_banner",
+      "breakpoints": true
     }
   ]
 }
