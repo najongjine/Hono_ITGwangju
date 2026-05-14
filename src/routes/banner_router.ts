@@ -22,11 +22,20 @@ const ok = (data: unknown = null, message = "") => ({
 const getApiName = (c: Context) => `${c.req.method} ${new URL(c.req.url).pathname}`;
 
 const getImageBaseUrl = (c: Context) =>
-  (
-    process.env.PUBLIC_API_BASE_URL ??
-    process.env.API_BASE_URL ??
-    new URL(c.req.url).origin
-  ).replace(/\/+$/, "");
+  (() => {
+    const configuredUrl = process.env.PUBLIC_API_BASE_URL ?? process.env.API_BASE_URL;
+    if (configuredUrl) {
+      return configuredUrl;
+    }
+
+    const forwardedHost = c.req.header("x-forwarded-host") ?? c.req.header("host");
+    if (forwardedHost) {
+      const forwardedProto = c.req.header("x-forwarded-proto") ?? "https";
+      return `${forwardedProto.split(",")[0]}://${forwardedHost.split(",")[0]}`;
+    }
+
+    return new URL(c.req.url).origin;
+  })().replace(/\/+$/, "");
 
 const buildImageUrl = (path: string, baseUrl = "") => {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;

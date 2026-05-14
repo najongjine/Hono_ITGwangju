@@ -13,9 +13,18 @@ const ok = (data = null, message = "") => ({
     msg: message,
 });
 const getApiName = (c) => `${c.req.method} ${new URL(c.req.url).pathname}`;
-const getImageBaseUrl = (c) => (process.env.PUBLIC_API_BASE_URL ??
-    process.env.API_BASE_URL ??
-    new URL(c.req.url).origin).replace(/\/+$/, "");
+const getImageBaseUrl = (c) => (() => {
+    const configuredUrl = process.env.PUBLIC_API_BASE_URL ?? process.env.API_BASE_URL;
+    if (configuredUrl) {
+        return configuredUrl;
+    }
+    const forwardedHost = c.req.header("x-forwarded-host") ?? c.req.header("host");
+    if (forwardedHost) {
+        const forwardedProto = c.req.header("x-forwarded-proto") ?? "https";
+        return `${forwardedProto.split(",")[0]}://${forwardedHost.split(",")[0]}`;
+    }
+    return new URL(c.req.url).origin;
+})().replace(/\/+$/, "");
 const buildImageUrl = (path, baseUrl = "") => {
     const normalizedPath = path.startsWith("/") ? path : `/${path}`;
     const normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, "");
