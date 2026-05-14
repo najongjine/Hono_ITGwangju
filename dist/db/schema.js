@@ -53,43 +53,6 @@ export const tCourses = pgTable("t_courses", {
         name: "t_courses_updated_by_fkey"
     }).onDelete("set null"),
 ]);
-export const tBanner = pgTable("t_banner", {
-    id: serial().primaryKey().notNull(),
-    title: varchar().default("").notNull(),
-    subtitle: varchar().default("").notNull(),
-    description: text().default("").notNull(),
-    imageFileId: integer("image_file_id"),
-    linkUrl: varchar("link_url").default("").notNull(),
-    linkTarget: varchar("link_target").default("_self").notNull(),
-    position: varchar().default("main").notNull(),
-    isVisible: boolean("is_visible").default(true).notNull(),
-    status: varchar().default("active").notNull(),
-    sortOrder: integer("sort_order").default(0).notNull(),
-    startAt: timestamp("start_at", { mode: "string" }),
-    endAt: timestamp("end_at", { mode: "string" }),
-    createdBy: integer("created_by"),
-    updatedBy: integer("updated_by"),
-    createdAt: timestamp("created_at", { mode: "string" }).defaultNow().notNull(),
-    updatedAt: timestamp("updated_at", { mode: "string" }).defaultNow().notNull(),
-}, (table) => [
-    index("idx_t_banner_position_visible").using("btree", table.position.asc().nullsLast().op("text_ops"), table.isVisible.asc().nullsLast().op("bool_ops"), table.status.asc().nullsLast().op("text_ops")),
-    index("idx_t_banner_sort_order").using("btree", table.sortOrder.asc().nullsLast().op("int4_ops"), table.createdAt.desc().nullsFirst().op("timestamp_ops")),
-    foreignKey({
-        columns: [table.createdBy],
-        foreignColumns: [tUser.id],
-        name: "t_banner_created_by_fkey"
-    }).onDelete("set null"),
-    foreignKey({
-        columns: [table.imageFileId],
-        foreignColumns: [tFiles.id],
-        name: "t_banner_image_file_id_fkey"
-    }).onDelete("set null"),
-    foreignKey({
-        columns: [table.updatedBy],
-        foreignColumns: [tUser.id],
-        name: "t_banner_updated_by_fkey"
-    }).onDelete("set null"),
-]);
 export const tUser = pgTable("t_user", {
     id: serial().primaryKey().notNull(),
     provider: varchar().default('google'),
@@ -266,28 +229,6 @@ export const tInquiries = pgTable("t_inquiries", {
         name: "t_inquiries_user_id_fkey"
     }).onDelete("set null"),
 ]);
-export const tInquiryReplies = pgTable("t_inquiry_replies", {
-    id: serial().primaryKey().notNull(),
-    inquiryId: integer("inquiry_id").notNull(),
-    userId: integer("user_id"),
-    authorRole: varchar("author_role").default('user').notNull(),
-    content: text().default("").notNull(),
-    status: varchar().default('active').notNull(),
-    createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
-    updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
-}, (table) => [
-    index("idx_t_inquiry_replies_inquiry_id").using("btree", table.inquiryId.asc().nullsLast().op("int4_ops")),
-    foreignKey({
-        columns: [table.inquiryId],
-        foreignColumns: [tInquiries.id],
-        name: "t_inquiry_replies_inquiry_id_fkey"
-    }).onDelete("cascade"),
-    foreignKey({
-        columns: [table.userId],
-        foreignColumns: [tUser.id],
-        name: "t_inquiry_replies_user_id_fkey"
-    }).onDelete("set null"),
-]);
 export const tFiles = pgTable("t_files", {
     id: integer().primaryKey().generatedAlwaysAsIdentity({ name: "t_files_id_seq", startWith: 1, increment: 1, minValue: 1, maxValue: 2147483647, cache: 1 }),
     originalName: varchar("original_name").default(""),
@@ -342,4 +283,63 @@ export const tUserRoles = pgTable("t_user_roles", {
         foreignColumns: [tUser.id],
         name: "fk_user_roles_user"
     }).onDelete("cascade"),
+]);
+export const tInquiryReplies = pgTable("t_inquiry_replies", {
+    id: serial().primaryKey().notNull(),
+    inquiryId: integer("inquiry_id").notNull(),
+    userId: integer("user_id"),
+    authorRole: varchar("author_role").default('user').notNull(),
+    content: text().default("").notNull(),
+    status: varchar().default('active').notNull(),
+    createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+    index("idx_t_inquiry_replies_inquiry_id").using("btree", table.inquiryId.asc().nullsLast().op("int4_ops")),
+    foreignKey({
+        columns: [table.inquiryId],
+        foreignColumns: [tInquiries.id],
+        name: "t_inquiry_replies_inquiry_id_fkey"
+    }).onDelete("cascade"),
+    foreignKey({
+        columns: [table.userId],
+        foreignColumns: [tUser.id],
+        name: "t_inquiry_replies_user_id_fkey"
+    }).onDelete("set null"),
+]);
+export const tBanner = pgTable("t_banner", {
+    id: serial().primaryKey().notNull(),
+    title: varchar().default(""),
+    subtitle: varchar().default(""),
+    description: text().default(""),
+    imageFileId: integer("image_file_id"),
+    linkUrl: varchar("link_url").default(""),
+    linkTarget: varchar("link_target").default('_self'),
+    position: varchar().default('main'),
+    isVisible: boolean("is_visible").default(true),
+    status: varchar().default('active'),
+    sortOrder: integer("sort_order").default(0),
+    startAt: timestamp("start_at", { mode: 'string' }),
+    endAt: timestamp("end_at", { mode: 'string' }),
+    createdBy: integer("created_by"),
+    updatedBy: integer("updated_by"),
+    createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
+}, (table) => [
+    index("idx_t_banner_position_visible").using("btree", table.position.asc().nullsLast().op("text_ops"), table.isVisible.asc().nullsLast().op("text_ops"), table.status.asc().nullsLast().op("bool_ops")),
+    index("idx_t_banner_sort_order").using("btree", table.sortOrder.asc().nullsLast().op("int4_ops"), table.createdAt.asc().nullsLast().op("timestamp_ops")),
+    foreignKey({
+        columns: [table.createdBy],
+        foreignColumns: [tUser.id],
+        name: "t_banner_created_by_fkey"
+    }).onDelete("set null"),
+    foreignKey({
+        columns: [table.imageFileId],
+        foreignColumns: [tFiles.id],
+        name: "t_banner_image_file_id_fkey"
+    }).onDelete("set null"),
+    foreignKey({
+        columns: [table.updatedBy],
+        foreignColumns: [tUser.id],
+        name: "t_banner_updated_by_fkey"
+    }).onDelete("set null"),
 ]);

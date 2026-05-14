@@ -285,17 +285,17 @@ router.put("/:id", async (c) => {
         const saved = (await db
             .update(tBanner)
             .set({
-            title: readString(input, ["title"], existing.title),
-            subtitle: readString(input, ["subtitle"], existing.subtitle),
-            description: readString(input, ["description"], existing.description),
+            title: readString(input, ["title"], existing.title ?? ""),
+            subtitle: readString(input, ["subtitle"], existing.subtitle ?? ""),
+            description: readString(input, ["description"], existing.description ?? ""),
             imageFileId: uploadedImage?.id ?? explicitImageFileId ?? existing.imageFileId,
-            linkUrl: readString(input, ["linkUrl", "link_url"], existing.linkUrl),
-            linkTarget: readString(input, ["linkTarget", "link_target"], existing.linkTarget) ||
+            linkUrl: readString(input, ["linkUrl", "link_url"], existing.linkUrl ?? ""),
+            linkTarget: readString(input, ["linkTarget", "link_target"], existing.linkTarget ?? "_self") ||
                 "_self",
-            position: readString(input, ["position"], existing.position) || "main",
-            isVisible: isTruthy(readString(input, ["isVisible", "is_visible"], String(existing.isVisible)), existing.isVisible),
-            status: readString(input, ["status"], existing.status) || "active",
-            sortOrder: readNumber(input, ["sortOrder", "sort_order"], existing.sortOrder),
+            position: readString(input, ["position"], existing.position ?? "main") || "main",
+            isVisible: isTruthy(readString(input, ["isVisible", "is_visible"], String(existing.isVisible)), existing.isVisible ?? true),
+            status: readString(input, ["status"], existing.status ?? "active") || "active",
+            sortOrder: readNumber(input, ["sortOrder", "sort_order"], existing.sortOrder ?? 0),
             startAt: readNullableDateTime(input, ["startAt", "start_at"], existing.startAt),
             endAt: readNullableDateTime(input, ["endAt", "end_at"], existing.endAt),
             updatedBy: admin.id,

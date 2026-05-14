@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm/relations";
-import { tCourses, tCourseSessions, tUser, tFiles, tEnrollments, tApply, tNotices, tPosts, tTest1, tTest1Child, tInquiries, tInquiryReplies, tFileLinks, tUserRoles } from "./schema.js";
+import { tCourses, tCourseSessions, tUser, tFiles, tEnrollments, tApply, tNotices, tPosts, tTest1, tTest1Child, tInquiries, tFileLinks, tUserRoles, tInquiryReplies, tBanner } from "./schema.js";
 
 export const tCourseSessionsRelations = relations(tCourseSessions, ({one, many}) => ({
 	tCourse: one(tCourses, {
@@ -46,9 +46,15 @@ export const tUserRelations = relations(tUser, ({many}) => ({
 	tInquiries_userId: many(tInquiries, {
 		relationName: "tInquiries_userId_tUser_id"
 	}),
-	tInquiryReplies: many(tInquiryReplies),
 	tFiles: many(tFiles),
 	tUserRoles: many(tUserRoles),
+	tInquiryReplies: many(tInquiryReplies),
+	tBanners_createdBy: many(tBanner, {
+		relationName: "tBanner_createdBy_tUser_id"
+	}),
+	tBanners_updatedBy: many(tBanner, {
+		relationName: "tBanner_updatedBy_tUser_id"
+	}),
 }));
 
 export const tFilesRelations = relations(tFiles, ({one, many}) => ({
@@ -58,6 +64,7 @@ export const tFilesRelations = relations(tFiles, ({one, many}) => ({
 		references: [tUser.id]
 	}),
 	tFileLinks: many(tFileLinks),
+	tBanners: many(tBanner),
 }));
 
 export const tEnrollmentsRelations = relations(tEnrollments, ({one, many}) => ({
@@ -130,17 +137,6 @@ export const tInquiriesRelations = relations(tInquiries, ({one, many}) => ({
 	tInquiryReplies: many(tInquiryReplies),
 }));
 
-export const tInquiryRepliesRelations = relations(tInquiryReplies, ({one}) => ({
-	tInquiry: one(tInquiries, {
-		fields: [tInquiryReplies.inquiryId],
-		references: [tInquiries.id]
-	}),
-	tUser: one(tUser, {
-		fields: [tInquiryReplies.userId],
-		references: [tUser.id]
-	}),
-}));
-
 export const tFileLinksRelations = relations(tFileLinks, ({one}) => ({
 	tFile: one(tFiles, {
 		fields: [tFileLinks.fileId],
@@ -152,5 +148,33 @@ export const tUserRolesRelations = relations(tUserRoles, ({one}) => ({
 	tUser: one(tUser, {
 		fields: [tUserRoles.userId],
 		references: [tUser.id]
+	}),
+}));
+
+export const tInquiryRepliesRelations = relations(tInquiryReplies, ({one}) => ({
+	tInquiry: one(tInquiries, {
+		fields: [tInquiryReplies.inquiryId],
+		references: [tInquiries.id]
+	}),
+	tUser: one(tUser, {
+		fields: [tInquiryReplies.userId],
+		references: [tUser.id]
+	}),
+}));
+
+export const tBannerRelations = relations(tBanner, ({one}) => ({
+	tUser_createdBy: one(tUser, {
+		fields: [tBanner.createdBy],
+		references: [tUser.id],
+		relationName: "tBanner_createdBy_tUser_id"
+	}),
+	tFile: one(tFiles, {
+		fields: [tBanner.imageFileId],
+		references: [tFiles.id]
+	}),
+	tUser_updatedBy: one(tUser, {
+		fields: [tBanner.updatedBy],
+		references: [tUser.id],
+		relationName: "tBanner_updatedBy_tUser_id"
 	}),
 }));
