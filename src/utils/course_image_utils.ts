@@ -17,7 +17,25 @@ const DESCRIPTION_IMAGE_ROLE = "description_image";
 
 export type CourseImageFile = typeof tFiles.$inferSelect;
 
-const isDevelopmentStorage = () => process.env.NODE_ENV !== "production";
+const useSupabaseStorage = () => {
+  if (process.env.USE_LOCAL_STORAGE === "true") {
+    return false;
+  }
+
+  return (
+    process.env.NODE_ENV === "production" ||
+    Boolean(process.env.STORAGE_ENDPOINT ?? process.env.STORAGE_Endpoint)
+  );
+};
+
+const buildImageUrl = (path: string, baseUrl = "") => {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, "");
+
+  return normalizedBaseUrl
+    ? `${normalizedBaseUrl}${normalizedPath}`
+    : normalizedPath;
+};
 
 const makeStorageKey = (dir: string, fileName: string) => {
   const safeDir = dir
@@ -72,7 +90,7 @@ export const uploadCourseImage = async (file: File, dir: string) => {
         storedName: originalName,
       };
 
-  if (isDevelopmentStorage()) {
+  if (useSupabaseStorage()) {
     const storageKey = makeStorageKey(dir, uploadBody.storedName);
     const uploaded = await uploadFileAndCreateSignedUrl({
       key: storageKey.key,
@@ -112,13 +130,18 @@ export const uploadCourseImage = async (file: File, dir: string) => {
   });
 };
 
-export const withCourseFileUrl = (file: CourseImageFile | null) => {
+export const withCourseFileUrl = (
+  file: CourseImageFile | null,
+  baseUrl = ""
+) => {
   if (!file) {
     return null;
   }
 
   const storageKey = file.storageKey ?? "";
-  const url = storageKey ? `/api/courses/images/${file.id}` : "";
+  const url = storageKey
+    ? buildImageUrl(`/api/courses/images/${file.id}`, baseUrl)
+    : "";
 
   return {
     ...file,
@@ -158,7 +181,8 @@ export const getCourseImageResponse = async (fileId: number) => {
 
 export const getCourseImageRows = async (
   courseId: number,
-  thumbnailFileId: number | null
+  thumbnailFileId: number | null,
+  baseUrl = ""
 ) => {
   const thumbnailRows = thumbnailFileId
     ? await db.select().from(tFiles).where(eq(tFiles.id, thumbnailFileId)).limit(1)
@@ -180,10 +204,10 @@ export const getCourseImageRows = async (
     .orderBy(asc(tFileLinks.sortOrder), asc(tFileLinks.id));
 
   return {
-    thumbnail: withCourseFileUrl(thumbnailRows[0] ?? null),
+    thumbnail: withCourseFileUrl(thumbnailRows[0] ?? null, baseUrl),
     descriptionImages: descriptionRows.map(({ link, file }) => ({
         link,
-        file: withCourseFileUrl(file),
+        file: withCourseFileUrl(file, baseUrl),
       })),
   };
 };

@@ -21,6 +21,22 @@ const ok = (data: unknown = null, message = "") => ({
 
 const getApiName = (c: Context) => `${c.req.method} ${new URL(c.req.url).pathname}`;
 
+const getImageBaseUrl = (c: Context) =>
+  (
+    process.env.PUBLIC_API_BASE_URL ??
+    process.env.API_BASE_URL ??
+    new URL(c.req.url).origin
+  ).replace(/\/+$/, "");
+
+const buildImageUrl = (path: string, baseUrl = "") => {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, "");
+
+  return normalizedBaseUrl
+    ? `${normalizedBaseUrl}${normalizedPath}`
+    : normalizedPath;
+};
+
 const fail = (c: Context, error: unknown) => ({
   success: false,
   data: null,
@@ -138,7 +154,10 @@ const requireAdminUser = async (c: Context) => {
   throw new Error("admin permission is required");
 };
 
-const withBannerFileUrl = (file: typeof tFiles.$inferSelect | null) => {
+const withBannerFileUrl = (
+  file: typeof tFiles.$inferSelect | null,
+  baseUrl = ""
+) => {
   if (!file) {
     return null;
   }
@@ -146,23 +165,23 @@ const withBannerFileUrl = (file: typeof tFiles.$inferSelect | null) => {
   return {
     ...file,
     url: file.storageKey
-      ? `/api/banners/images/${file.id}`
+      ? buildImageUrl(`/api/banners/images/${file.id}`, baseUrl)
       : "",
   };
 };
 
-const getBannerImage = async (imageFileId: number | null) => {
+const getBannerImage = async (imageFileId: number | null, baseUrl = "") => {
   if (!imageFileId) {
     return null;
   }
 
   const rows = await db.select().from(tFiles).where(eq(tFiles.id, imageFileId)).limit(1);
-  return withBannerFileUrl(rows[0] ?? null);
+  return withBannerFileUrl(rows[0] ?? null, baseUrl);
 };
 
-const withImage = async (banner: typeof tBanner.$inferSelect) => ({
+const withImage = async (banner: typeof tBanner.$inferSelect, baseUrl = "") => ({
   ...banner,
-  image: await getBannerImage(banner.imageFileId),
+  image: await getBannerImage(banner.imageFileId, baseUrl),
 });
 
 const buildPublicWhere = (position: string, includeHidden: boolean) => {
@@ -217,7 +236,8 @@ router.get("/", async (c) => {
       .where(where.length > 0 ? and(...where) : undefined)
       .orderBy(asc(tBanner.sortOrder), desc(tBanner.createdAt), desc(tBanner.id));
 
-    return c.json(ok(await Promise.all(banners.map(withImage))));
+    const imageBaseUrl = getImageBaseUrl(c);
+    return c.json(ok(await Promise.all(banners.map((banner) => withImage(banner, imageBaseUrl)))));
   } catch (error) {
     return c.json(fail(c, error));
   }
@@ -240,7 +260,7 @@ router.get("/:id", async (c) => {
       await requireAdminUser(c);
     }
 
-    return c.json(ok(await withImage(banner)));
+    return c.json(ok(await withImage(banner, getImageBaseUrl(c))));
   } catch (error) {
     return c.json(fail(c, error));
   }
@@ -318,7 +338,7 @@ router.post("/", async (c) => {
               .returning()
           )[0];
 
-    return c.json(ok(await withImage(saved)));
+    return c.json(ok(await withImage(saved, getImageBaseUrl(c))));
   } catch (error) {
     return c.json(fail(c, error));
   }
@@ -374,7 +394,7 @@ router.put("/:id", async (c) => {
         .returning()
     )[0];
 
-    return c.json(ok(await withImage(saved)));
+    return c.json(ok(await withImage(saved, getImageBaseUrl(c))));
   } catch (error) {
     return c.json(fail(c, error));
   }
@@ -447,7 +467,7 @@ router.patch("/:id", async (c) => {
       await db.update(tBanner).set(updateData).where(eq(tBanner.id, id)).returning()
     )[0];
 
-    return c.json(ok(await withImage(saved)));
+    return c.json(ok(await withImage(saved, getImageBaseUrl(c))));
   } catch (error) {
     return c.json(fail(c, error));
   }

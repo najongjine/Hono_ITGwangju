@@ -28,6 +28,13 @@ const ok = (data: unknown = null, message = "") => ({
 
 const getApiName = (c: Context) => `${c.req.method} ${new URL(c.req.url).pathname}`;
 
+const getImageBaseUrl = (c: Context) =>
+  (
+    process.env.PUBLIC_API_BASE_URL ??
+    process.env.API_BASE_URL ??
+    new URL(c.req.url).origin
+  ).replace(/\/+$/, "");
+
 const parseIntegerListValue = (value: FormDataEntryValue): number[] => {
   const text = String(value).trim();
   if (!text) {
@@ -121,7 +128,11 @@ router.get("/", async (c) => {
 
         return {
           ...course,
-          ...(await getCourseImageRows(course.id, course.thumbnailFileId)),
+          ...(await getCourseImageRows(
+            course.id,
+            course.thumbnailFileId,
+            getImageBaseUrl(c)
+          )),
           sessions,
         };
       })
@@ -371,7 +382,11 @@ router.get("/:id", async (c) => {
     return c.json(
       ok({
         ...course,
-        ...(await getCourseImageRows(course.id, course.thumbnailFileId)),
+        ...(await getCourseImageRows(
+          course.id,
+          course.thumbnailFileId,
+          getImageBaseUrl(c)
+        )),
         sessions,
       })
     );
@@ -545,7 +560,11 @@ router.post("/", async (c) => {
     return c.json(
       ok({
         ...saved,
-        ...(await getCourseImageRows(saved.id, saved.thumbnailFileId)),
+        ...(await getCourseImageRows(
+          saved.id,
+          saved.thumbnailFileId,
+          getImageBaseUrl(c)
+        )),
         sessions,
       })
     );

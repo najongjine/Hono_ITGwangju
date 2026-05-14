@@ -9,7 +9,20 @@ import { createSignedDownloadUrl, getStorageBucket, uploadFileAndCreateSignedUrl
 import { convertImageToWebp, isImageMimeType } from "./utils.js";
 const COURSE_TABLE = "t_courses";
 const DESCRIPTION_IMAGE_ROLE = "description_image";
-const isDevelopmentStorage = () => process.env.NODE_ENV !== "production";
+const useSupabaseStorage = () => {
+    if (process.env.USE_LOCAL_STORAGE === "true") {
+        return false;
+    }
+    return (process.env.NODE_ENV === "production" ||
+        Boolean(process.env.STORAGE_ENDPOINT ?? process.env.STORAGE_Endpoint));
+};
+const buildImageUrl = (path, baseUrl = "") => {
+    const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+    const normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, "");
+    return normalizedBaseUrl
+        ? `${normalizedBaseUrl}${normalizedPath}`
+        : normalizedPath;
+};
 const makeStorageKey = (dir, fileName) => {
     const safeDir = dir
         .replace(/\\/g, "/")
@@ -52,7 +65,7 @@ export const uploadCourseImage = async (file, dir) => {
             size: originalBody.length,
             storedName: originalName,
         };
-    if (isDevelopmentStorage()) {
+    if (useSupabaseStorage()) {
         const storageKey = makeStorageKey(dir, uploadBody.storedName);
         const uploaded = await uploadFileAndCreateSignedUrl({
             key: storageKey.key,
@@ -88,12 +101,14 @@ export const uploadCourseImage = async (file, dir) => {
         fileSize: uploaded.size,
     });
 };
-export const withCourseFileUrl = (file) => {
+export const withCourseFileUrl = (file, baseUrl = "") => {
     if (!file) {
         return null;
     }
     const storageKey = file.storageKey ?? "";
-    const url = storageKey ? `/api/courses/images/${file.id}` : "";
+    const url = storageKey
+        ? buildImageUrl(`/api/courses/images/${file.id}`, baseUrl)
+        : "";
     return {
         ...file,
         url,
@@ -122,7 +137,7 @@ export const getCourseImageResponse = async (fileId) => {
         },
     });
 };
-export const getCourseImageRows = async (courseId, thumbnailFileId) => {
+export const getCourseImageRows = async (courseId, thumbnailFileId, baseUrl = "") => {
     const thumbnailRows = thumbnailFileId
         ? await db.select().from(tFiles).where(eq(tFiles.id, thumbnailFileId)).limit(1)
         : [];
@@ -136,10 +151,10 @@ export const getCourseImageRows = async (courseId, thumbnailFileId) => {
         .where(and(eq(tFileLinks.targetTable, COURSE_TABLE), eq(tFileLinks.targetId, courseId), eq(tFileLinks.fileRole, DESCRIPTION_IMAGE_ROLE)))
         .orderBy(asc(tFileLinks.sortOrder), asc(tFileLinks.id));
     return {
-        thumbnail: withCourseFileUrl(thumbnailRows[0] ?? null),
+        thumbnail: withCourseFileUrl(thumbnailRows[0] ?? null, baseUrl),
         descriptionImages: descriptionRows.map(({ link, file }) => ({
             link,
-            file: withCourseFileUrl(file),
+            file: withCourseFileUrl(file, baseUrl),
         })),
     };
 };

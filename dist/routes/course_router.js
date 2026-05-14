@@ -14,6 +14,9 @@ const ok = (data = null, message = "") => ({
     msg: message,
 });
 const getApiName = (c) => `${c.req.method} ${new URL(c.req.url).pathname}`;
+const getImageBaseUrl = (c) => (process.env.PUBLIC_API_BASE_URL ??
+    process.env.API_BASE_URL ??
+    new URL(c.req.url).origin).replace(/\/+$/, "");
 const parseIntegerListValue = (value) => {
     const text = String(value).trim();
     if (!text) {
@@ -81,7 +84,7 @@ router.get("/", async (c) => {
                 .orderBy(asc(tCourseSessions.sessionNo), asc(tCourseSessions.startDate), asc(tCourseSessions.id));
             return {
                 ...course,
-                ...(await getCourseImageRows(course.id, course.thumbnailFileId)),
+                ...(await getCourseImageRows(course.id, course.thumbnailFileId, getImageBaseUrl(c))),
                 sessions,
             };
         }));
@@ -269,7 +272,7 @@ router.get("/:id", async (c) => {
             .orderBy(asc(tCourseSessions.sessionNo), asc(tCourseSessions.startDate), asc(tCourseSessions.id));
         return c.json(ok({
             ...course,
-            ...(await getCourseImageRows(course.id, course.thumbnailFileId)),
+            ...(await getCourseImageRows(course.id, course.thumbnailFileId, getImageBaseUrl(c))),
             sessions,
         }));
     }
@@ -401,7 +404,7 @@ router.post("/", async (c) => {
             .orderBy(asc(tCourseSessions.sessionNo), asc(tCourseSessions.startDate), asc(tCourseSessions.id));
         return c.json(ok({
             ...saved,
-            ...(await getCourseImageRows(saved.id, saved.thumbnailFileId)),
+            ...(await getCourseImageRows(saved.id, saved.thumbnailFileId, getImageBaseUrl(c))),
             sessions,
         }));
     }
