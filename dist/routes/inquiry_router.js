@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import { and, asc, desc, eq, ilike, ne, or } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { tInquiries, tInquiryReplies, tUserRoles } from "../db/schema.js";
-import { decryptPersonalData, encryptPersonalData, verifyUserToken, } from "../utils/auth_utils.js";
+import { tInquiries, tInquiryReplies } from "../db/schema.js";
+import { decryptPersonalData, encryptPersonalData, isAdminUser, verifyUserToken, } from "../utils/auth_utils.js";
 const router = new Hono();
 const MODULE_NAME = "inquiry_router";
 const ok = (data = null, message = "") => ({
@@ -47,14 +47,7 @@ const readString = (input, names, fallback = "") => {
 };
 const requireAdminUser = async (c) => {
     const user = await verifyUserToken(c.req.header("authorization") ?? "");
-    if (user.role === "admin") {
-        return user;
-    }
-    const roles = await db
-        .select({ roleName: tUserRoles.roleName })
-        .from(tUserRoles)
-        .where(eq(tUserRoles.userId, user.id));
-    if (roles.some((role) => role.roleName === "admin")) {
+    if (await isAdminUser(user)) {
         return user;
     }
     throw new Error("admin permission is required");
@@ -72,14 +65,10 @@ const canAccessInquiry = async (c, inquiryUserId) => {
     if (!user) {
         return false;
     }
-    if (user.role === "admin" || user.id === inquiryUserId) {
+    if ((await isAdminUser(user)) || user.id === inquiryUserId) {
         return true;
     }
-    const roles = await db
-        .select({ roleName: tUserRoles.roleName })
-        .from(tUserRoles)
-        .where(eq(tUserRoles.userId, user.id));
-    return roles.some((role) => role.roleName === "admin");
+    return false;
 };
 const safeInquiry = (inquiry) => ({
     ...inquiry,
@@ -99,19 +88,6 @@ const safeInquiryWithReplies = async (inquiry) => ({
     ...safeInquiry(inquiry),
     replies: await getInquiryReplies(inquiry.id),
 });
-const isAdminUser = async (user) => {
-    if (!user) {
-        return false;
-    }
-    if (user.role === "admin") {
-        return true;
-    }
-    const roles = await db
-        .select({ roleName: tUserRoles.roleName })
-        .from(tUserRoles)
-        .where(eq(tUserRoles.userId, user.id));
-    return roles.some((role) => role.roleName === "admin");
-};
 router.get("/", async (c) => {
     try {
         await requireAdminUser(c);

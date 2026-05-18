@@ -1,10 +1,11 @@
 import { Hono, type Context } from "hono";
 import { and, asc, desc, eq, ilike, ne, or } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { tInquiries, tInquiryReplies, tUserRoles } from "../db/schema.js";
+import { tInquiries, tInquiryReplies } from "../db/schema.js";
 import {
   decryptPersonalData,
   encryptPersonalData,
+  isAdminUser,
   verifyUserToken,
 } from "../utils/auth_utils.js";
 
@@ -66,15 +67,7 @@ const readString = (
 
 const requireAdminUser = async (c: Context) => {
   const user = await verifyUserToken(c.req.header("authorization") ?? "");
-  if (user.role === "admin") {
-    return user;
-  }
-
-  const roles = await db
-    .select({ roleName: tUserRoles.roleName })
-    .from(tUserRoles)
-    .where(eq(tUserRoles.userId, user.id));
-  if (roles.some((role) => role.roleName === "admin")) {
+  if (await isAdminUser(user)) {
     return user;
   }
 
@@ -94,16 +87,10 @@ const canAccessInquiry = async (c: Context, inquiryUserId: number | null) => {
   if (!user) {
     return false;
   }
-  if (user.role === "admin" || user.id === inquiryUserId) {
+  if ((await isAdminUser(user)) || user.id === inquiryUserId) {
     return true;
   }
-
-  const roles = await db
-    .select({ roleName: tUserRoles.roleName })
-    .from(tUserRoles)
-    .where(eq(tUserRoles.userId, user.id));
-
-  return roles.some((role) => role.roleName === "admin");
+  return false;
 };
 
 const safeInquiry = (inquiry: typeof tInquiries.$inferSelect) => ({
@@ -133,22 +120,6 @@ const safeInquiryWithReplies = async (inquiry: typeof tInquiries.$inferSelect) =
   ...safeInquiry(inquiry),
   replies: await getInquiryReplies(inquiry.id),
 });
-
-const isAdminUser = async (user: { id: number; role?: string | null } | null) => {
-  if (!user) {
-    return false;
-  }
-  if (user.role === "admin") {
-    return true;
-  }
-
-  const roles = await db
-    .select({ roleName: tUserRoles.roleName })
-    .from(tUserRoles)
-    .where(eq(tUserRoles.userId, user.id));
-
-  return roles.some((role) => role.roleName === "admin");
-};
 
 router.get("/", async (c) => {
   try {

@@ -3,7 +3,7 @@ import { promisify } from "util";
 import { eq } from "drizzle-orm";
 import { Jwt } from "hono/utils/jwt";
 import { db } from "../db/index.js";
-import { tUser } from "../db/schema.js";
+import { tUser, tUserRoles } from "../db/schema.js";
 const scrypt = promisify(scryptCallback);
 const ENCRYPTED_PREFIX = "enc:v1";
 const getJwtSecret = () => {
@@ -28,6 +28,57 @@ const getExpiresInSeconds = () => {
 };
 const toBase64Url = (value) => value.toString("base64url");
 const fromBase64Url = (value) => Buffer.from(value, "base64url");
+const normalizeRoles = (roles) => {
+    const normalized = [
+        ...new Set(roles
+            .map((role) => String(role ?? "").trim())
+            .filter((role) => role.length > 0)),
+    ];
+    return normalized.length > 0 ? normalized : ["user"];
+};
+const getPrimaryRole = (roles) => roles.includes("admin") ? "admin" : roles[0] ?? "user";
+export const getUserRoles = async (userId) => {
+    const rows = await db
+        .select({ roleName: tUserRoles.roleName })
+        .from(tUserRoles)
+        .where(eq(tUserRoles.userId, userId));
+    return normalizeRoles(rows.map((row) => row.roleName));
+};
+export const withUserRoles = async (user) => {
+    const roles = "roles" in user ? normalizeRoles(user.roles) : await getUserRoles(user.id);
+    return {
+        ...user,
+        roles,
+        role: getPrimaryRole(roles),
+    };
+};
+export const getUserWithRolesById = async (userId) => {
+    const rows = await db
+        .select({
+        user: tUser,
+        roleName: tUserRoles.roleName,
+    })
+        .from(tUser)
+        .leftJoin(tUserRoles, eq(tUserRoles.userId, tUser.id))
+        .where(eq(tUser.id, userId));
+    const user = rows[0]?.user;
+    if (!user) {
+        return null;
+    }
+    const roles = normalizeRoles(rows.map((row) => row.roleName));
+    return withUserRoles({
+        ...user,
+        roles,
+        role: getPrimaryRole(roles),
+    });
+};
+export const isAdminUser = async (user) => {
+    if (!user) {
+        return false;
+    }
+    const roles = "roles" in user ? normalizeRoles(user.roles ?? []) : await getUserRoles(user.id);
+    return roles.includes("admin");
+};
 export const createTemporaryPassword = () => {
     const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
     const bytes = randomBytes(10);
@@ -111,13 +162,15 @@ export const verifyPassword = async (password, storedHash) => {
         timingSafeEqual(storedKey, candidateKey));
 };
 export const createUserToken = async (user) => {
+    const userWithRoles = await withUserRoles(user);
     const now = Math.floor(Date.now() / 1000);
     const expiresIn = getExpiresInSeconds();
     const token = await Jwt.sign({
-        sub: String(user.id),
-        userId: user.id,
-        email: user.email ?? "",
-        role: user.role ?? "user",
+        sub: String(userWithRoles.id),
+        userId: userWithRoles.id,
+        email: userWithRoles.email ?? "",
+        role: userWithRoles.role,
+        roles: userWithRoles.roles,
         iat: now,
         exp: now + expiresIn,
     }, getJwtSecret(), "HS256");
@@ -141,12 +194,7 @@ export const verifyUserToken = async (authorization = "") => {
     if (!Number.isFinite(userId) || userId <= 0) {
         throw new Error("invalid token");
     }
-    const rows = await db
-        .select()
-        .from(tUser)
-        .where(eq(tUser.id, userId))
-        .limit(1);
-    const user = rows[0];
+    const user = await getUserWithRolesById(userId);
     if (!user || user.status !== "active") {
         throw new Error("user not found or inactive");
     }

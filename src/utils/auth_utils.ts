@@ -11,12 +11,16 @@ import { promisify } from "util";
 import { eq } from "drizzle-orm";
 import { Jwt } from "hono/utils/jwt";
 import { db } from "../db/index.js";
-import { tUser } from "../db/schema.js";
+import { tUser, tUserRoles } from "../db/schema.js";
 
 const scrypt = promisify(scryptCallback);
 const ENCRYPTED_PREFIX = "enc:v1";
 
 type UserRow = typeof tUser.$inferSelect;
+export type UserWithRoles = UserRow & {
+  roles: string[];
+  role: string;
+};
 
 const getJwtSecret = () => {
   const secret = process.env.JWT_SECRET;
@@ -46,6 +50,76 @@ const getExpiresInSeconds = () => {
 const toBase64Url = (value: Buffer) => value.toString("base64url");
 
 const fromBase64Url = (value: string) => Buffer.from(value, "base64url");
+
+const normalizeRoles = (roles: Array<string | null | undefined>) => {
+  const normalized = [
+    ...new Set(
+      roles
+        .map((role) => String(role ?? "").trim())
+        .filter((role) => role.length > 0)
+    ),
+  ];
+
+  return normalized.length > 0 ? normalized : ["user"];
+};
+
+const getPrimaryRole = (roles: string[]) =>
+  roles.includes("admin") ? "admin" : roles[0] ?? "user";
+
+export const getUserRoles = async (userId: number) => {
+  const rows = await db
+    .select({ roleName: tUserRoles.roleName })
+    .from(tUserRoles)
+    .where(eq(tUserRoles.userId, userId));
+
+  return normalizeRoles(rows.map((row) => row.roleName));
+};
+
+export const withUserRoles = async (
+  user: UserRow | UserWithRoles
+): Promise<UserWithRoles> => {
+  const roles = "roles" in user ? normalizeRoles(user.roles) : await getUserRoles(user.id);
+
+  return {
+    ...user,
+    roles,
+    role: getPrimaryRole(roles),
+  };
+};
+
+export const getUserWithRolesById = async (userId: number) => {
+  const rows = await db
+    .select({
+      user: tUser,
+      roleName: tUserRoles.roleName,
+    })
+    .from(tUser)
+    .leftJoin(tUserRoles, eq(tUserRoles.userId, tUser.id))
+    .where(eq(tUser.id, userId));
+  const user = rows[0]?.user;
+  if (!user) {
+    return null;
+  }
+  const roles = normalizeRoles(rows.map((row) => row.roleName));
+
+  return withUserRoles({
+    ...user,
+    roles,
+    role: getPrimaryRole(roles),
+  });
+};
+
+export const isAdminUser = async (
+  user: { id: number; roles?: string[]; role?: string | null } | null
+) => {
+  if (!user) {
+    return false;
+  }
+
+  const roles =
+    "roles" in user ? normalizeRoles(user.roles ?? []) : await getUserRoles(user.id);
+  return roles.includes("admin");
+};
 
 export const createTemporaryPassword = () => {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
@@ -116,7 +190,7 @@ export const decryptPersonalData = (value: string | null | undefined) => {
   return decrypted.toString("utf8");
 };
 
-export const toSafeUser = (user: UserRow) => {
+export const toSafeUser = (user: UserRow | UserWithRoles) => {
   const { password, ...safeUser } = user;
   return {
     ...safeUser,
@@ -153,15 +227,17 @@ export const verifyPassword = async (
   );
 };
 
-export const createUserToken = async (user: UserRow) => {
+export const createUserToken = async (user: UserRow | UserWithRoles) => {
+  const userWithRoles = await withUserRoles(user);
   const now = Math.floor(Date.now() / 1000);
   const expiresIn = getExpiresInSeconds();
   const token = await Jwt.sign(
     {
-      sub: String(user.id),
-      userId: user.id,
-      email: user.email ?? "",
-      role: user.role ?? "user",
+      sub: String(userWithRoles.id),
+      userId: userWithRoles.id,
+      email: userWithRoles.email ?? "",
+      role: userWithRoles.role,
+      roles: userWithRoles.roles,
       iat: now,
       exp: now + expiresIn,
     },
@@ -193,12 +269,7 @@ export const verifyUserToken = async (authorization = "") => {
     throw new Error("invalid token");
   }
 
-  const rows = await db
-    .select()
-    .from(tUser)
-    .where(eq(tUser.id, userId))
-    .limit(1);
-  const user = rows[0];
+  const user = await getUserWithRolesById(userId);
   if (!user || user.status !== "active") {
     throw new Error("user not found or inactive");
   }

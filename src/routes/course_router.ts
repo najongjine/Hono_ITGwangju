@@ -1,11 +1,14 @@
 import { Hono, type Context } from "hono";
-import { and, asc, desc, eq, ilike, ne, or } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import {
   tCourseSessions,
   tCourses,
+  tEnrollments,
   tFileLinks,
+  tUser,
 } from "../db/schema.js";
+import { toSafeUser, withUserRoles } from "../utils/auth_utils.js";
 import {
   type CourseImageFile,
   getCourseImageResponse,
@@ -18,6 +21,10 @@ const router = new Hono();
 const MODULE_NAME = "course_router";
 const COURSE_TABLE = "t_courses";
 const DESCRIPTION_IMAGE_ROLE = "description_image";
+const COURSE_STATUS_VALUES = ["모집중", "운영중", "마감"] as const;
+const DELETED_STATUS = "deleted";
+
+type CourseStatus = (typeof COURSE_STATUS_VALUES)[number];
 
 const ok = (data: unknown = null, message = "") => ({
   success: true,
@@ -83,6 +90,132 @@ const fail = (c: Context, error: unknown) => ({
   msg: error instanceof Error ? error.message : String(error),
 });
 
+const statusAliasMap = new Map<string, CourseStatus>([
+  ["모집중", "모집중"],
+  ["recruiting", "모집중"],
+  ["recruit", "모집중"],
+  ["open", "모집중"],
+  ["운영중", "운영중"],
+  ["active", "운영중"],
+  ["running", "운영중"],
+  ["ongoing", "운영중"],
+  ["마감", "마감"],
+  ["closed", "마감"],
+  ["completed", "마감"],
+  ["ended", "마감"],
+  ["end", "마감"],
+  ["종료", "마감"],
+]);
+
+const normalizeCourseStatus = (
+  value: unknown,
+  fallback: CourseStatus = "모집중"
+) => {
+  const text = String(value ?? "").trim();
+  if (!text) {
+    return fallback;
+  }
+
+  const normalized = statusAliasMap.get(text.toLowerCase()) ?? statusAliasMap.get(text);
+  if (!normalized) {
+    throw new Error(`status must be one of: ${COURSE_STATUS_VALUES.join(", ")}`);
+  }
+
+  return normalized;
+};
+
+const toResponseCourseStatus = (status: string | null | undefined) => {
+  if (status === DELETED_STATUS) {
+    return DELETED_STATUS;
+  }
+
+  return normalizeCourseStatus(status, "운영중");
+};
+
+const normalizeCourse = <T extends { status: string | null }>(course: T) => ({
+  ...course,
+  status: toResponseCourseStatus(course.status),
+});
+
+const normalizeSession = <T extends { status: string | null }>(session: T) => ({
+  ...session,
+  status: toResponseCourseStatus(session.status),
+});
+
+const getSessionEnrollmentCounts = async (sessionIds: number[]) => {
+  if (sessionIds.length === 0) {
+    return new Map<number, number>();
+  }
+
+  const rows = await db
+    .select({
+      sessionId: tEnrollments.sessionId,
+      totalEnrollment: sql<number>`count(${tEnrollments.id})::int`,
+    })
+    .from(tEnrollments)
+    .where(
+      and(
+        inArray(tEnrollments.sessionId, sessionIds),
+        ne(tEnrollments.applyStatus, "deleted")
+      )
+    )
+    .groupBy(tEnrollments.sessionId);
+
+  return new Map(
+    rows.map((row) => [row.sessionId, Number(row.totalEnrollment ?? 0)])
+  );
+};
+
+const attachSessionStats = async <T extends typeof tCourseSessions.$inferSelect>(
+  sessions: T[]
+) => {
+  const counts = await getSessionEnrollmentCounts(sessions.map((session) => session.id));
+
+  return sessions.map((session) => ({
+    ...normalizeSession(session),
+    totalEnrollment: counts.get(session.id) ?? 0,
+  }));
+};
+
+const attachCourseStats = async <T extends typeof tCourses.$inferSelect>(
+  course: T,
+  sessions: Array<typeof tCourseSessions.$inferSelect>
+) => {
+  const sessionsWithStats = await attachSessionStats(sessions);
+  const totalCapacity = sessionsWithStats.reduce(
+    (sum, session) => sum + Number(session.capacity ?? 0),
+    0
+  );
+  const totalEnrollment = sessionsWithStats.reduce(
+    (sum, session) => sum + Number(session.totalEnrollment ?? 0),
+    0
+  );
+
+  return {
+    ...normalizeCourse(course),
+    sessionCount: sessionsWithStats.length,
+    totalCapacity,
+    totalEnrollment,
+    sessions: sessionsWithStats,
+  };
+};
+
+const getCourseSessions = (courseId: number, includeDeleted = false) =>
+  db
+    .select()
+    .from(tCourseSessions)
+    .where(
+      and(
+        eq(tCourseSessions.courseId, courseId),
+        includeDeleted ? undefined : ne(tCourseSessions.status, DELETED_STATUS)
+      )
+    )
+    .orderBy(
+      asc(tCourseSessions.sessionNo),
+      asc(tCourseSessions.startDate),
+      asc(tCourseSessions.id)
+    );
+
 
 router.get("/images/:fileId", async (c) => {
   try {
@@ -103,6 +236,7 @@ router.get("/", async (c) => {
     const includeDeleted = ["true", "1", "y", "yes", "on"].includes(
       String(c.req.query("includeDeleted") ?? "").toLowerCase()
     );
+    const status = c.req.query("status");
     const where = [
       includeDeleted ? undefined : ne(tCourses.status, "deleted"),
       q
@@ -110,6 +244,9 @@ router.get("/", async (c) => {
             ilike(tCourses.courseName, `%${q}%`),
             ilike(tCourses.summary, `%${q}%`)
           )
+        : undefined,
+      status && status !== DELETED_STATUS
+        ? eq(tCourses.status, normalizeCourseStatus(status, "모집중"))
         : undefined,
     ].filter(Boolean);
     const courses = await db
@@ -120,29 +257,16 @@ router.get("/", async (c) => {
 
     const data = await Promise.all(
       courses.map(async (course) => {
-        const sessions = await db
-          .select()
-          .from(tCourseSessions)
-          .where(
-            and(
-              eq(tCourseSessions.courseId, course.id),
-              ne(tCourseSessions.status, "deleted")
-            )
-          )
-          .orderBy(
-            asc(tCourseSessions.sessionNo),
-            asc(tCourseSessions.startDate),
-            asc(tCourseSessions.id)
-          );
+        const sessions = await getCourseSessions(course.id);
+        const courseWithStats = await attachCourseStats(course, sessions);
 
         return {
-          ...course,
+          ...courseWithStats,
           ...(await getCourseImageRows(
             course.id,
             course.thumbnailFileId,
             getImageBaseUrl(c)
           )),
-          sessions,
         };
       })
     );
@@ -172,9 +296,13 @@ router.get("/:courseId/sessions", async (c) => {
     const includeDeleted = ["true", "1", "y", "yes", "on"].includes(
       String(c.req.query("includeDeleted") ?? "").toLowerCase()
     );
+    const status = c.req.query("status");
     const where = [
       eq(tCourseSessions.courseId, courseId),
       includeDeleted ? undefined : ne(tCourseSessions.status, "deleted"),
+      status && status !== DELETED_STATUS
+        ? eq(tCourseSessions.status, normalizeCourseStatus(status, "모집중"))
+        : undefined,
     ].filter(Boolean);
     const sessions = await db
       .select()
@@ -186,7 +314,7 @@ router.get("/:courseId/sessions", async (c) => {
         asc(tCourseSessions.id)
       );
 
-    return c.json(ok(sessions));
+    return c.json(ok(await attachSessionStats(sessions)));
   } catch (error) {
     return c.json(fail(c, error));
   }
@@ -218,7 +346,62 @@ router.get("/:courseId/sessions/:sessionId", async (c) => {
       return c.json(fail(c, new Error("course session not found")));
     }
 
-    return c.json(ok(sessionRows[0]));
+    return c.json(ok((await attachSessionStats([sessionRows[0]]))[0]));
+  } catch (error) {
+    return c.json(fail(c, error));
+  }
+});
+
+router.get("/:courseId/sessions/:sessionId/enrollments", async (c) => {
+  try {
+    const courseId = Number(c.req.param("courseId"));
+    const sessionId = Number(c.req.param("sessionId"));
+    if (!Number.isFinite(courseId) || courseId <= 0) {
+      return c.json(fail(c, new Error("valid courseId is required")));
+    }
+    if (!Number.isFinite(sessionId) || sessionId <= 0) {
+      return c.json(fail(c, new Error("valid sessionId is required")));
+    }
+
+    const sessionRows = await db
+      .select({ id: tCourseSessions.id })
+      .from(tCourseSessions)
+      .where(
+        and(
+          eq(tCourseSessions.courseId, courseId),
+          eq(tCourseSessions.id, sessionId),
+          ne(tCourseSessions.status, DELETED_STATUS)
+        )
+      )
+      .limit(1);
+    if (!sessionRows[0]) {
+      return c.json(fail(c, new Error("course session not found")));
+    }
+
+    const rows = await db
+      .select({
+        enrollment: tEnrollments,
+        user: tUser,
+      })
+      .from(tEnrollments)
+      .leftJoin(tUser, eq(tUser.id, tEnrollments.userId))
+      .where(
+        and(
+          eq(tEnrollments.courseId, courseId),
+          eq(tEnrollments.sessionId, sessionId),
+          ne(tEnrollments.applyStatus, "deleted")
+        )
+      )
+      .orderBy(desc(tEnrollments.appliedAt), desc(tEnrollments.id));
+
+    const data = await Promise.all(
+      rows.map(async ({ enrollment, user }) => ({
+        ...enrollment,
+        user: user ? toSafeUser(await withUserRoles(user)) : null,
+      }))
+    );
+
+    return c.json(ok(data));
   } catch (error) {
     return c.json(fail(c, error));
   }
@@ -288,7 +471,7 @@ router.post("/:courseId/sessions", async (c) => {
       classEndTime:
         String(inputValue("classEndTime", "class_end_time") ?? "").trim() || null,
       capacity: Number.isFinite(capacity) ? capacity : 20,
-      status: String(inputValue("status") ?? "recruiting"),
+      status: normalizeCourseStatus(inputValue("status"), "모집중"),
     };
 
     const now = new Date().toISOString();
@@ -315,7 +498,7 @@ router.post("/:courseId/sessions", async (c) => {
             )
             .returning();
 
-    return c.json(ok(rows[0]));
+    return c.json(ok(rows[0] ? (await attachSessionStats([rows[0]]))[0] : null));
   } catch (error) {
     return c.json(fail(c, error));
   }
@@ -335,7 +518,7 @@ router.delete("/:courseId/sessions/:sessionId", async (c) => {
     const rows = await db
       .update(tCourseSessions)
       .set({
-        status: "deleted",
+        status: DELETED_STATUS,
         updatedAt: new Date().toISOString(),
       })
       .where(
@@ -350,7 +533,7 @@ router.delete("/:courseId/sessions/:sessionId", async (c) => {
       return c.json(fail(c, new Error("course session not found")));
     }
 
-    return c.json(ok(rows[0]));
+    return c.json(ok(normalizeSession(rows[0])));
   } catch (error) {
     return c.json(fail(c, error));
   }
@@ -373,30 +556,17 @@ router.get("/:id", async (c) => {
     }
 
     const course = rows[0];
-    const sessions = await db
-      .select()
-      .from(tCourseSessions)
-      .where(
-        and(
-          eq(tCourseSessions.courseId, course.id),
-          ne(tCourseSessions.status, "deleted")
-        )
-      )
-      .orderBy(
-        asc(tCourseSessions.sessionNo),
-        asc(tCourseSessions.startDate),
-        asc(tCourseSessions.id)
-      );
+    const sessions = await getCourseSessions(course.id);
+    const courseWithStats = await attachCourseStats(course, sessions);
 
     return c.json(
       ok({
-        ...course,
+        ...courseWithStats,
         ...(await getCourseImageRows(
           course.id,
           course.thumbnailFileId,
           getImageBaseUrl(c)
         )),
-        sessions,
       })
     );
   } catch (error) {
@@ -445,7 +615,7 @@ router.post("/", async (c) => {
           : ["true", "1", "y", "yes", "on"].includes(
               String(isVisibleValue).toLowerCase()
             ),
-      status: String(form.get("status") ?? "active"),
+      status: normalizeCourseStatus(form.get("status"), "운영중"),
       sortOrder: Number.isFinite(sortOrder) ? sortOrder : 0,
       createdBy: Number.isFinite(createdBy) && createdBy > 0 ? createdBy : null,
       updatedBy: Number.isFinite(updatedBy) && updatedBy > 0 ? updatedBy : null,
@@ -551,30 +721,17 @@ router.post("/", async (c) => {
       return course;
     });
 
-    const sessions = await db
-      .select()
-      .from(tCourseSessions)
-      .where(
-        and(
-          eq(tCourseSessions.courseId, saved.id),
-          ne(tCourseSessions.status, "deleted")
-        )
-      )
-      .orderBy(
-        asc(tCourseSessions.sessionNo),
-        asc(tCourseSessions.startDate),
-        asc(tCourseSessions.id)
-      );
+    const sessions = await getCourseSessions(saved.id);
+    const courseWithStats = await attachCourseStats(saved, sessions);
 
     return c.json(
       ok({
-        ...saved,
+        ...courseWithStats,
         ...(await getCourseImageRows(
           saved.id,
           saved.thumbnailFileId,
           getImageBaseUrl(c)
         )),
-        sessions,
       })
     );
   } catch (error) {
@@ -592,7 +749,7 @@ router.delete("/:id", async (c) => {
     const rows = await db
       .update(tCourses)
       .set({
-        status: "deleted",
+        status: DELETED_STATUS,
         updatedAt: new Date().toISOString(),
       })
       .where(eq(tCourses.id, id))
@@ -602,7 +759,7 @@ router.delete("/:id", async (c) => {
       return c.json(fail(c, new Error("course not found")));
     }
 
-    return c.json(ok(rows[0]));
+    return c.json(ok(normalizeCourse(rows[0])));
   } catch (error) {
     return c.json(fail(c, error));
   }

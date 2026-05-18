@@ -1,8 +1,8 @@
 import { Hono, type Context } from "hono";
 import { and, desc, eq, ilike, ne, or, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { tFileLinks, tFiles, tNotices, tUserRoles } from "../db/schema.js";
-import { toSafeUser, verifyUserToken } from "../utils/auth_utils.js";
+import { tFileLinks, tFiles, tNotices } from "../db/schema.js";
+import { isAdminUser, toSafeUser, verifyUserToken } from "../utils/auth_utils.js";
 import { uploadLocalFile } from "../utils/local_file_crud.js";
 import { convertImageToWebp, isImageMimeType } from "../utils/utils.js";
 
@@ -114,15 +114,7 @@ const readIntegerList = (
 
 const requireAdminUser = async (c: Context) => {
   const user = await verifyUserToken(c.req.header("authorization") ?? "");
-  if (user.role === "admin") {
-    return user;
-  }
-
-  const roles = await db
-    .select({ roleName: tUserRoles.roleName })
-    .from(tUserRoles)
-    .where(eq(tUserRoles.userId, user.id));
-  if (roles.some((role) => role.roleName === "admin")) {
+  if (await isAdminUser(user)) {
     return user;
   }
 

@@ -1,12 +1,12 @@
 import { Hono, type Context } from "hono";
 import { and, asc, desc, eq, gte, ilike, isNull, lte, ne, or } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { tBanner, tFiles, tUserRoles } from "../db/schema.js";
+import { tBanner, tFiles } from "../db/schema.js";
 import {
   getCourseImageResponse,
   uploadCourseImage,
 } from "../utils/course_image_utils.js";
-import { verifyUserToken } from "../utils/auth_utils.js";
+import { isAdminUser, verifyUserToken } from "../utils/auth_utils.js";
 
 const router = new Hono();
 
@@ -148,15 +148,7 @@ const getFormImage = (form: FormData) =>
 
 const requireAdminUser = async (c: Context) => {
   const user = await verifyUserToken(c.req.header("authorization") ?? "");
-  if (user.role === "admin") {
-    return user;
-  }
-
-  const roles = await db
-    .select({ roleName: tUserRoles.roleName })
-    .from(tUserRoles)
-    .where(eq(tUserRoles.userId, user.id));
-  if (roles.some((role) => role.roleName === "admin")) {
+  if (await isAdminUser(user)) {
     return user;
   }
 
