@@ -4,6 +4,7 @@ import { db } from "../db/index.js";
 import { tFileLinks, tFiles, tNotices } from "../db/schema.js";
 import { isAdminUser, toSafeUser, verifyUserToken } from "../utils/auth_utils.js";
 import { uploadLocalFile } from "../utils/local_file_crud.js";
+import { getCloudinaryCloudName, uploadCloudinaryFile, } from "../utils/cloudinary_file_crud.js";
 import { convertImageToWebp, isImageMimeType } from "../utils/utils.js";
 const router = new Hono();
 const MODULE_NAME = "notice_router";
@@ -109,25 +110,35 @@ const uploadNoticeImage = async (file, uploadedBy) => {
     }
     const originalBody = Buffer.from(await file.arrayBuffer());
     const uploadBody = await convertImageToWebp(originalBody, file.name, file.type);
-    const uploaded = await uploadLocalFile({
-        dir: "notices/images",
-        originalName: file.name,
-        storedName: uploadBody.storedName,
-        body: uploadBody.buffer,
-        contentType: uploadBody.mimeType,
-    });
+    const useCloudinary = process.env.NODE_ENV !== "production";
+    const cloudinaryFile = useCloudinary
+        ? await uploadCloudinaryFile({
+            key: `notices/images/${crypto.randomUUID()}.webp`,
+            body: uploadBody.buffer,
+            contentType: uploadBody.mimeType,
+        })
+        : null;
+    const localFile = useCloudinary
+        ? null
+        : await uploadLocalFile({
+            dir: "notices/images",
+            originalName: file.name,
+            storedName: uploadBody.storedName,
+            body: uploadBody.buffer,
+            contentType: uploadBody.mimeType,
+        });
     const rows = await db
         .insert(tFiles)
         .values({
         originalName: file.name,
-        storedName: uploaded.storedName,
-        storageType: "local",
-        filePath: uploaded.path,
-        bucket: "",
-        storageKey: uploaded.key,
-        publicUrl: "",
-        mimeType: uploaded.contentType,
-        fileSize: uploaded.size,
+        storedName: cloudinaryFile?.key.split("/").pop() ?? localFile.storedName,
+        storageType: useCloudinary ? "cloudinary" : "local",
+        filePath: localFile?.path ?? "",
+        bucket: useCloudinary ? getCloudinaryCloudName() : "",
+        storageKey: cloudinaryFile?.key ?? localFile.key,
+        publicUrl: cloudinaryFile?.url ?? "",
+        mimeType: cloudinaryFile?.contentType ?? localFile.contentType,
+        fileSize: cloudinaryFile?.size ?? localFile.size,
         uploadedBy,
     })
         .returning();
@@ -135,9 +146,11 @@ const uploadNoticeImage = async (file, uploadedBy) => {
 };
 const withFileUrl = (file) => ({
     ...file,
-    url: file.storageKey
-        ? `/api/file/files/download?key=${encodeURIComponent(file.storageKey)}`
-        : "",
+    url: file.storageType === "cloudinary" && file.publicUrl
+        ? file.publicUrl
+        : file.storageKey
+            ? `/api/file/files/download?key=${encodeURIComponent(file.storageKey)}`
+            : "",
 });
 const getNoticeImages = async (noticeId) => {
     const rows = await db

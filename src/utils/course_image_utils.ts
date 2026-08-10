@@ -6,10 +6,9 @@ import { tFileLinks, tFiles } from "../db/schema.js";
 import { insertLocalFileMeta } from "../routes/file_router_query.js";
 import { readLocalFile, uploadLocalFile } from "./local_file_crud.js";
 import {
-  createSignedDownloadUrl,
-  getStorageBucket,
-  uploadFileAndCreateSignedUrl,
-} from "./supabase_file_crud.js";
+  getCloudinaryCloudName,
+  uploadCloudinaryFile,
+} from "./cloudinary_file_crud.js";
 import { convertImageToWebp, isImageMimeType } from "./utils.js";
 
 const COURSE_TABLE = "t_courses";
@@ -17,16 +16,7 @@ const DESCRIPTION_IMAGE_ROLE = "description_image";
 
 export type CourseImageFile = typeof tFiles.$inferSelect;
 
-const useSupabaseStorage = () => {
-  if (process.env.USE_LOCAL_STORAGE === "true") {
-    return false;
-  }
-
-  return (
-    process.env.NODE_ENV === "production" ||
-    Boolean(process.env.STORAGE_ENDPOINT ?? process.env.STORAGE_Endpoint)
-  );
-};
+const useCloudinaryStorage = () => process.env.NODE_ENV !== "production";
 
 const buildImageUrl = (path: string, baseUrl = "") => {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
@@ -53,23 +43,24 @@ const makeStorageKey = (dir: string, fileName: string) => {
   };
 };
 
-const insertSupabaseFileMeta = async (file: {
+const insertCloudinaryFileMeta = async (file: {
   originalName: string;
   storedName: string;
   storageKey: string;
   mimeType: string;
   fileSize: number;
+  publicUrl: string;
 }) => {
   const rows = await db
     .insert(tFiles)
     .values({
       originalName: file.originalName,
       storedName: file.storedName,
-      storageType: "supabase",
+      storageType: "cloudinary",
       filePath: "",
-      bucket: getStorageBucket(),
+      bucket: getCloudinaryCloudName(),
       storageKey: file.storageKey,
-      publicUrl: "",
+      publicUrl: file.publicUrl,
       mimeType: file.mimeType,
       fileSize: file.fileSize,
     })
@@ -90,9 +81,9 @@ export const uploadCourseImage = async (file: File, dir: string) => {
         storedName: originalName,
       };
 
-  if (useSupabaseStorage()) {
+  if (useCloudinaryStorage()) {
     const storageKey = makeStorageKey(dir, uploadBody.storedName);
-    const uploaded = await uploadFileAndCreateSignedUrl({
+    const uploaded = await uploadCloudinaryFile({
       key: storageKey.key,
       body: uploadBody.buffer,
       contentType: uploadBody.mimeType,
@@ -101,12 +92,13 @@ export const uploadCourseImage = async (file: File, dir: string) => {
         stored_name: encodeURIComponent(storageKey.storedName),
       },
     });
-    const dbFile = await insertSupabaseFileMeta({
+    const dbFile = await insertCloudinaryFileMeta({
       originalName,
       storedName: storageKey.storedName,
-      storageKey: uploaded.file.key,
-      mimeType: uploaded.file.contentType ?? uploadBody.mimeType,
-      fileSize: uploaded.file.size ?? uploadBody.size,
+      storageKey: uploaded.key,
+      publicUrl: uploaded.url,
+      mimeType: uploaded.contentType,
+      fileSize: uploaded.size,
     });
 
     return dbFile;
@@ -161,8 +153,11 @@ export const getCourseImageResponse = async (fileId: number) => {
     throw new Error("image storage key is empty");
   }
 
-  if (file.storageType === "supabase") {
-    return Response.redirect(await createSignedDownloadUrl(storageKey, 60 * 10));
+  if (file.storageType === "cloudinary") {
+    if (!file.publicUrl) {
+      throw new Error("Cloudinary public URL is empty");
+    }
+    return Response.redirect(file.publicUrl);
   }
 
   const localFile = await readLocalFile(storageKey);

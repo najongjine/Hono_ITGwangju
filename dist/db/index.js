@@ -9,12 +9,15 @@ const envFile = process.env.ENV_FILE ??
         ? ".env.production"
         : ".env.development");
 dotenv.config({ path: envFile });
-export const pool = new Pool({
-    host: process.env.DB_HOST,
-    port: Number(process.env.DB_PORT || "5432"),
-    user: process.env.DB_USERNAME,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    ssl: process.env.DB_SSL === "false" ? false : { rejectUnauthorized: false },
-});
+const ssl = process.env.DB_SSL === "false" ? false : { rejectUnauthorized: false };
+export const pool = new Pool(process.env.DATABASE_URL
+    ? { connectionString: process.env.DATABASE_URL, ssl }
+    : {
+        host: process.env.DB_HOST,
+        port: Number(process.env.DB_PORT || "5432"),
+        user: process.env.DB_USERNAME,
+        password: process.env.DB_PASSWORD,
+        database: process.env.DB_NAME,
+        ssl,
+    });
 export const db = drizzle(pool, { schema });

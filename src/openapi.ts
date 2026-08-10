@@ -1,10 +1,10 @@
-export const openApiSpec = {
+const rawOpenApiSpec = {
   openapi: "3.0.3",
   info: {
     title: "Hono ITGwangju API",
     version: "1.0.0",
     description:
-      "Local file and private Supabase Storage CRUD API. Image uploads are converted to WebP before storage.",
+      "Production local-file API and development Cloudinary uploads. Images are converted to WebP before storage.",
   },
   servers: [
     {
@@ -16,10 +16,6 @@ export const openApiSpec = {
     {
       name: "Local Files",
       description: "Local computer file CRUD with database metadata",
-    },
-    {
-      name: "Supabase Storage",
-      description: "Private bucket file CRUD with signed URLs",
     },
     {
       name: "Courses",
@@ -1258,3 +1254,12 @@ export const openApiSpec = {
     },
   },
 } as const;
+
+export const openApiSpec = {
+  ...rawOpenApiSpec,
+  paths: Object.fromEntries(
+    Object.entries(rawOpenApiSpec.paths).filter(
+      ([route]) => !route.startsWith("/api/supabase-test")
+    )
+  ),
+};

@@ -40,7 +40,7 @@ export const tCourses = pgTable("t_courses", {
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
 	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
 }, (table) => [
-	index("idx_t_courses_visible_status").using("btree", table.isVisible.asc().nullsLast().op("text_ops"), table.status.asc().nullsLast().op("text_ops")),
+	index("idx_t_courses_visible_status").on(table.isVisible, table.status),
 	foreignKey({
 			columns: [table.createdBy],
 			foreignColumns: [tUser.id],
@@ -164,7 +164,7 @@ export const tNotices = pgTable("t_notices", {
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
 }, (table) => [
-	index("idx_t_notices_visible_pinned").using("btree", table.isVisible.asc().nullsLast().op("bool_ops"), table.isPinned.asc().nullsLast().op("timestamp_ops"), table.createdAt.desc().nullsFirst().op("bool_ops")),
+	index("idx_t_notices_visible_pinned").on(table.isVisible, table.isPinned, table.createdAt),
 	foreignKey({
 			columns: [table.authorId],
 			foreignColumns: [tUser.id],
@@ -277,7 +277,7 @@ export const tFileLinks = pgTable("t_file_links", {
 	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
 }, (table) => [
 	index("idx_t_file_links_file_id").using("btree", table.fileId.asc().nullsLast().op("int4_ops")),
-	index("idx_t_file_links_target").using("btree", table.targetTable.asc().nullsLast().op("int4_ops"), table.targetId.asc().nullsLast().op("text_ops")),
+	index("idx_t_file_links_target").on(table.targetTable, table.targetId),
 	foreignKey({
 			columns: [table.fileId],
 			foreignColumns: [tFiles.id],
@@ -341,7 +341,7 @@ export const tBanner = pgTable("t_banner", {
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
 	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
 }, (table) => [
-	index("idx_t_banner_position_visible").using("btree", table.position.asc().nullsLast().op("text_ops"), table.isVisible.asc().nullsLast().op("text_ops"), table.status.asc().nullsLast().op("bool_ops")),
+	index("idx_t_banner_position_visible").on(table.position, table.isVisible, table.status),
 	index("idx_t_banner_sort_order").using("btree", table.sortOrder.asc().nullsLast().op("int4_ops"), table.createdAt.asc().nullsLast().op("timestamp_ops")),
 	foreignKey({
 			columns: [table.createdBy],

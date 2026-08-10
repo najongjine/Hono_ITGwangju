@@ -8,9 +8,16 @@ const envFile =
     : ".env.development");
 dotenv.config({ path: envFile });
 
-const databaseUrl =
-  process.env.DATABASE_URL ??
-  `postgresql://${process.env.DB_USERNAME}:${process.env.DB_PASSWORD}@${process.env.DB_HOST}:${process.env.DB_PORT || "5432"}/${process.env.DB_NAME}`;
+const databaseUrl = process.env.DATABASE_URL ?? (() => {
+  const url = new URL("postgresql://localhost");
+  url.username = process.env.DB_USERNAME ?? "";
+  url.password = process.env.DB_PASSWORD ?? "";
+  url.hostname = process.env.DB_HOST ?? "";
+  url.port = process.env.DB_PORT || "5432";
+  url.pathname = `/${process.env.DB_NAME ?? ""}`;
+  url.searchParams.set("sslmode", "require");
+  return url.toString();
+})();
 
 export default defineConfig({
   schema: "./src/db/schema.ts",
