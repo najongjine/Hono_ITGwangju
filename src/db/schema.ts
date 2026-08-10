@@ -79,15 +79,11 @@ export const tUser = pgTable("t_user", {
 
 export const tEnrollments = pgTable("t_enrollments", {
 	id: serial().primaryKey().notNull(),
-	userId: integer("user_id"),
+	userId: integer("user_id").notNull(),
 	courseId: integer("course_id").notNull(),
 	sessionId: integer("session_id").notNull(),
-	applicantName: varchar("applicant_name").default("").notNull(),
-	applicantPhone: varchar("applicant_phone").default("").notNull(),
-	applicantEmail: varchar("applicant_email").default("").notNull(),
-	applyStatus: varchar("apply_status").default('submitted').notNull(),
-	approvalStatus: varchar("approval_status").default('pending').notNull(),
-	memo: text().default("").notNull(),
+	status: varchar().default('pending').notNull(),
+	memo: text(),
 	appliedAt: timestamp("applied_at", { mode: 'string' }).defaultNow().notNull(),
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
@@ -108,46 +104,8 @@ export const tEnrollments = pgTable("t_enrollments", {
 			columns: [table.userId],
 			foreignColumns: [tUser.id],
 			name: "t_enrollments_user_id_fkey"
-		}).onDelete("set null"),
+		}).onDelete("restrict"),
 	unique("t_enrollments_user_session_uk").on(table.userId, table.sessionId),
-]);
-
-export const tApply = pgTable("t_apply", {
-	id: serial().primaryKey().notNull(),
-	enrollmentId: integer("enrollment_id"),
-	userId: integer("user_id"),
-	sessionId: integer("session_id"),
-	applicantName: varchar("applicant_name").default("").notNull(),
-	phone: varchar().default("").notNull(),
-	email: varchar().default("").notNull(),
-	birthDate: date("birth_date"),
-	gender: varchar().default("").notNull(),
-	address: varchar().default("").notNull(),
-	detailAddress: varchar("detail_address").default("").notNull(),
-	currentJob: varchar("current_job").default("").notNull(),
-	educationLevel: varchar("education_level").default("").notNull(),
-	applicationContent: text("application_content").default("").notNull(),
-	privacyAgreed: boolean("privacy_agreed").default(false).notNull(),
-	status: varchar().default('submitted').notNull(),
-	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
-	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
-}, (table) => [
-	index("idx_t_apply_enrollment_id").using("btree", table.enrollmentId.asc().nullsLast().op("int4_ops")),
-	foreignKey({
-			columns: [table.enrollmentId],
-			foreignColumns: [tEnrollments.id],
-			name: "t_apply_enrollment_id_fkey"
-		}).onDelete("cascade"),
-	foreignKey({
-			columns: [table.sessionId],
-			foreignColumns: [tCourseSessions.id],
-			name: "t_apply_session_id_fkey"
-		}).onDelete("set null"),
-	foreignKey({
-			columns: [table.userId],
-			foreignColumns: [tUser.id],
-			name: "t_apply_user_id_fkey"
-		}).onDelete("set null"),
 ]);
 
 export const tNotices = pgTable("t_notices", {

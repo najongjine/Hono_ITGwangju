@@ -71,6 +71,13 @@
       "when": 1779073200000,
       "tag": "0009_course_status_labels",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786356000000,
+      "tag": "0010_simplify_enrollments",
+      "breakpoints": true
     }
   ]
 }

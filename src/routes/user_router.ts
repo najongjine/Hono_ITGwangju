@@ -2,7 +2,6 @@ import { Hono, type Context } from "hono";
 import { and, desc, eq, ilike, ne, or, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import {
-  tApply,
   tCourseSessions,
   tCourses,
   tEnrollments,
@@ -90,11 +89,6 @@ const normalizeEnrollmentStatus = (value: unknown, fallback = "pending") => {
   }
 
   const aliases = new Map([
-    ["이수", "completed"],
-    ["수료", "completed"],
-    ["completed", "completed"],
-    ["complete", "completed"],
-    ["pass", "completed"],
     ["탈락", "rejected"],
     ["불합격", "rejected"],
     ["rejected", "rejected"],
@@ -113,7 +107,7 @@ const normalizeEnrollmentStatus = (value: unknown, fallback = "pending") => {
 
   const normalized = aliases.get(text.toLowerCase()) ?? aliases.get(text);
   if (!normalized) {
-    throw new Error("status must be one of: pending, approved, rejected, completed");
+    throw new Error("status must be one of: pending, approved, rejected");
   }
 
   return normalized;
@@ -121,7 +115,6 @@ const normalizeEnrollmentStatus = (value: unknown, fallback = "pending") => {
 
 const toEnrollmentStatusLabel = (status: string | null | undefined) => {
   const normalized = normalizeEnrollmentStatus(status, "pending");
-  if (normalized === "completed") return "이수";
   if (normalized === "rejected") return "탈락";
   if (normalized === "approved") return "선발";
   return "미선발";
@@ -139,36 +132,22 @@ const getAdminUserDetail = async (userId: number) => {
       enrollment: tEnrollments,
       course: tCourses,
       session: tCourseSessions,
-      apply: tApply,
     })
     .from(tEnrollments)
     .leftJoin(tCourses, eq(tCourses.id, tEnrollments.courseId))
     .leftJoin(tCourseSessions, eq(tCourseSessions.id, tEnrollments.sessionId))
-    .leftJoin(tApply, eq(tApply.enrollmentId, tEnrollments.id))
     .where(eq(tEnrollments.userId, userId))
     .orderBy(desc(tEnrollments.appliedAt), desc(tEnrollments.id));
 
-  const enrollments = rows.map(({ enrollment, course, session, apply }) => ({
+  const enrollments = rows.map(({ enrollment, course, session }) => ({
     ...enrollment,
-    statusLabel: toEnrollmentStatusLabel(enrollment.approvalStatus),
+    statusLabel: toEnrollmentStatusLabel(enrollment.status),
     course,
     session,
-    apply,
   }));
-
-  const profileApply =
-    rows.find(({ apply }) => apply?.address || apply?.detailAddress)?.apply ?? rows[0]?.apply ?? null;
 
   return {
     user: toSafeUser(await withUserRoles(user)),
-    profile: {
-      address: profileApply?.address ?? "",
-      detailAddress: profileApply?.detailAddress ?? "",
-      birthDate: profileApply?.birthDate ?? null,
-      gender: profileApply?.gender ?? "",
-      currentJob: profileApply?.currentJob ?? "",
-      educationLevel: profileApply?.educationLevel ?? "",
-    },
     enrollments,
   };
 };
@@ -483,7 +462,7 @@ const processEnrollment = async (c: Context) => {
     };
     const courseId = readNumber(input, ["courseId", "course_id"]);
     const sessionId = readNumber(input, ["sessionId", "session_id"]);
-    const status = readOptionalString(input, ["status", "approvalStatus", "approval_status"]);
+    const status = readOptionalString(input, ["status"]);
     const memo = readOptionalString(input, ["memo"]);
 
     const existingRows = await db
@@ -520,7 +499,7 @@ const processEnrollment = async (c: Context) => {
         courseId: nextCourseId,
         sessionId: nextSessionId,
         ...(status !== undefined
-          ? { approvalStatus: normalizeEnrollmentStatus(status, existing.approvalStatus) }
+          ? { status: normalizeEnrollmentStatus(status, existing.status) }
           : {}),
         ...(memo !== undefined ? { memo } : {}),
         updatedAt: new Date().toISOString(),
@@ -531,7 +510,7 @@ const processEnrollment = async (c: Context) => {
     return c.json(
       ok({
         ...updatedRows[0],
-        statusLabel: toEnrollmentStatusLabel(updatedRows[0]?.approvalStatus),
+        statusLabel: toEnrollmentStatusLabel(updatedRows[0]?.status),
       })
     );
   } catch (error) {
@@ -603,20 +582,14 @@ router.post("/enrollments/apply", async (c) => {
           )
           .limit(1)
       )[0];
-      if (existing && existing.applyStatus !== "cancelled" && existing.applyStatus !== "deleted") {
+      if (existing) {
         throw new Error("already applied to this course session");
       }
 
       const countRows = await tx
         .select({ count: sql<number>`count(*)::int` })
         .from(tEnrollments)
-        .where(
-          and(
-            eq(tEnrollments.sessionId, sessionId),
-            ne(tEnrollments.applyStatus, "cancelled"),
-            ne(tEnrollments.applyStatus, "deleted")
-          )
-        );
+        .where(eq(tEnrollments.sessionId, sessionId));
       const enrollmentCount = Number(countRows[0]?.count ?? 0);
       if (session.capacity !== null && enrollmentCount >= session.capacity) {
         throw new Error("course session capacity has been reached");
@@ -627,22 +600,12 @@ router.post("/enrollments/apply", async (c) => {
         userId: user.id,
         courseId,
         sessionId,
-        applicantName: safeUser.realName,
-        applicantPhone: safeUser.phone,
-        applicantEmail: safeUser.email ?? "",
-        applyStatus: "submitted",
-        approvalStatus: "pending",
+        status: "pending",
         appliedAt: now,
         updatedAt: now,
       };
 
-      const rows = existing
-        ? await tx
-            .update(tEnrollments)
-            .set(values)
-            .where(eq(tEnrollments.id, existing.id))
-            .returning()
-        : await tx.insert(tEnrollments).values(values).returning();
+      const rows = await tx.insert(tEnrollments).values(values).returning();
 
       return rows[0];
     });
@@ -650,7 +613,7 @@ router.post("/enrollments/apply", async (c) => {
     return c.json(
       ok({
         ...result,
-        statusLabel: toEnrollmentStatusLabel(result.approvalStatus),
+        statusLabel: toEnrollmentStatusLabel(result.status),
       }, "application submitted and pending approval")
     );
   } catch (error) {

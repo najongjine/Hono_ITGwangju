@@ -1,12 +1,11 @@
 import { relations } from "drizzle-orm/relations";
-import { tCourses, tCourseSessions, tUser, tFiles, tEnrollments, tApply, tNotices, tPosts, tTest1, tTest1Child, tInquiries, tFileLinks, tUserRoles, tInquiryReplies, tBanner } from "./schema.js";
+import { tCourses, tCourseSessions, tUser, tFiles, tEnrollments, tNotices, tPosts, tTest1, tTest1Child, tInquiries, tFileLinks, tUserRoles, tInquiryReplies, tBanner } from "./schema.js";
 export const tCourseSessionsRelations = relations(tCourseSessions, ({ one, many }) => ({
     tCourse: one(tCourses, {
         fields: [tCourseSessions.courseId],
         references: [tCourses.id]
     }),
     tEnrollments: many(tEnrollments),
-    tApplies: many(tApply),
 }));
 export const tCoursesRelations = relations(tCourses, ({ one, many }) => ({
     tCourseSessions: many(tCourseSessions),
@@ -34,7 +33,6 @@ export const tUserRelations = relations(tUser, ({ many }) => ({
         relationName: "tCourses_updatedBy_tUser_id"
     }),
     tEnrollments: many(tEnrollments),
-    tApplies: many(tApply),
     tNotices: many(tNotices),
     tPosts: many(tPosts),
     tInquiries_answeredBy: many(tInquiries, {
@@ -62,7 +60,7 @@ export const tFilesRelations = relations(tFiles, ({ one, many }) => ({
     tFileLinks: many(tFileLinks),
     tBanners: many(tBanner),
 }));
-export const tEnrollmentsRelations = relations(tEnrollments, ({ one, many }) => ({
+export const tEnrollmentsRelations = relations(tEnrollments, ({ one }) => ({
     tCourse: one(tCourses, {
         fields: [tEnrollments.courseId],
         references: [tCourses.id]
@@ -73,21 +71,6 @@ export const tEnrollmentsRelations = relations(tEnrollments, ({ one, many }) => 
     }),
     tUser: one(tUser, {
         fields: [tEnrollments.userId],
-        references: [tUser.id]
-    }),
-    tApplies: many(tApply),
-}));
-export const tApplyRelations = relations(tApply, ({ one }) => ({
-    tEnrollment: one(tEnrollments, {
-        fields: [tApply.enrollmentId],
-        references: [tEnrollments.id]
-    }),
-    tCourseSession: one(tCourseSessions, {
-        fields: [tApply.sessionId],
-        references: [tCourseSessions.id]
-    }),
-    tUser: one(tUser, {
-        fields: [tApply.userId],
         references: [tUser.id]
     }),
 }));

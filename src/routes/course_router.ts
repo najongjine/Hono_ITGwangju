@@ -167,12 +167,7 @@ const getSessionEnrollmentCounts = async (sessionIds: number[]) => {
       totalEnrollment: sql<number>`count(${tEnrollments.id})::int`,
     })
     .from(tEnrollments)
-    .where(
-      and(
-        inArray(tEnrollments.sessionId, sessionIds),
-        ne(tEnrollments.applyStatus, "deleted")
-      )
-    )
+    .where(inArray(tEnrollments.sessionId, sessionIds))
     .groupBy(tEnrollments.sessionId);
 
   return new Map(
@@ -390,8 +385,7 @@ router.get("/:courseId/sessions/:sessionId/enrollments", async (c) => {
       .where(
         and(
           eq(tEnrollments.courseId, courseId),
-          eq(tEnrollments.sessionId, sessionId),
-          ne(tEnrollments.applyStatus, "deleted")
+          eq(tEnrollments.sessionId, sessionId)
         )
       )
       .orderBy(desc(tEnrollments.appliedAt), desc(tEnrollments.id));
