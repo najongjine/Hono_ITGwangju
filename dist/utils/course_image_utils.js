@@ -102,22 +102,22 @@ export const withCourseFileUrl = (file, baseUrl = "") => {
     }
     const storageKey = file.storageKey ?? "";
     const url = storageKey
-        ? buildImageUrl(`/api/courses/images/${file.id}`, baseUrl)
+        ? buildImageUrl(`/api/files?file_id=${file.id}`, baseUrl)
         : "";
     return {
         ...file,
         url,
     };
 };
-export const getCourseImageResponse = async (fileId) => {
+export const getStoredFileResponse = async (fileId) => {
     const rows = await db.select().from(tFiles).where(eq(tFiles.id, fileId)).limit(1);
     const file = rows[0];
     if (!file) {
-        throw new Error("image file not found");
+        throw new Error("file not found");
     }
     const storageKey = file.storageKey ?? "";
     if (!storageKey) {
-        throw new Error("image storage key is empty");
+        throw new Error("file storage key is empty");
     }
     if (file.storageType === "cloudinary") {
         if (!file.publicUrl) {

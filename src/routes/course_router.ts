@@ -11,7 +11,6 @@ import {
 import { toSafeUser, withUserRoles } from "../utils/auth_utils.js";
 import {
   type CourseImageFile,
-  getCourseImageResponse,
   getCourseImageRows,
   uploadCourseImage,
 } from "../utils/course_image_utils.js";
@@ -44,7 +43,8 @@ const getImageBaseUrl = (c: Context) =>
 
     const forwardedHost = c.req.header("x-forwarded-host") ?? c.req.header("host");
     if (forwardedHost) {
-      const forwardedProto = c.req.header("x-forwarded-proto") ?? "https";
+      const forwardedProto =
+        c.req.header("x-forwarded-proto") ?? new URL(c.req.url).protocol.slice(0, -1);
       return `${forwardedProto.split(",")[0]}://${forwardedHost.split(",")[0]}`;
     }
 
@@ -216,19 +216,6 @@ const getCourseSessions = (courseId: number, includeDeleted = false) =>
       asc(tCourseSessions.id)
     );
 
-
-router.get("/images/:fileId", async (c) => {
-  try {
-    const fileId = Number(c.req.param("fileId"));
-    if (!Number.isFinite(fileId) || fileId <= 0) {
-      return c.json(fail(c, new Error("valid fileId is required")));
-    }
-
-    return getCourseImageResponse(fileId);
-  } catch (error) {
-    return c.json(fail(c, error));
-  }
-});
 
 router.get("/", async (c) => {
   try {

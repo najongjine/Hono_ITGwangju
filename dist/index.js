@@ -8,6 +8,7 @@ import { openApiSpec } from "./openapi.js";
 import bannerRouter from "./routes/banner_router.js";
 import courseRouter from "./routes/course_router.js";
 import fileRouter from "./routes/file_router.js";
+import filesRouter from "./routes/files_router.js";
 import inquiryRouter from "./routes/inquiry_router.js";
 import noticeRouter from "./routes/notice_router.js";
 import testRouter from "./routes/test_router.js";
@@ -54,6 +55,7 @@ app.get("/", async (c) => {
     }
 });
 app.route("/api/file", fileRouter);
+app.route("/api/files", filesRouter);
 app.route("/api/banners", bannerRouter);
 app.route("/api/courses", courseRouter);
 app.route("/api/inquiries", inquiryRouter);

@@ -146,11 +146,9 @@ const uploadNoticeImage = async (file, uploadedBy) => {
 };
 const withFileUrl = (file) => ({
     ...file,
-    url: file.storageType === "cloudinary" && file.publicUrl
-        ? file.publicUrl
-        : file.storageKey
-            ? `/api/file/files/download?key=${encodeURIComponent(file.storageKey)}`
-            : "",
+    url: file.storageKey
+        ? `/api/files?file_id=${file.id}`
+        : "",
 });
 const getNoticeImages = async (noticeId) => {
     const rows = await db

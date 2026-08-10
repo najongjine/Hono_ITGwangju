@@ -3,7 +3,7 @@ import { and, asc, desc, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { tCourseSessions, tCourses, tEnrollments, tFileLinks, tUser, } from "../db/schema.js";
 import { toSafeUser, withUserRoles } from "../utils/auth_utils.js";
-import { getCourseImageResponse, getCourseImageRows, uploadCourseImage, } from "../utils/course_image_utils.js";
+import { getCourseImageRows, uploadCourseImage, } from "../utils/course_image_utils.js";
 const router = new Hono();
 const MODULE_NAME = "course_router";
 const COURSE_TABLE = "t_courses";
@@ -24,7 +24,7 @@ const getImageBaseUrl = (c) => (() => {
     }
     const forwardedHost = c.req.header("x-forwarded-host") ?? c.req.header("host");
     if (forwardedHost) {
-        const forwardedProto = c.req.header("x-forwarded-proto") ?? "https";
+        const forwardedProto = c.req.header("x-forwarded-proto") ?? new URL(c.req.url).protocol.slice(0, -1);
         return `${forwardedProto.split(",")[0]}://${forwardedHost.split(",")[0]}`;
     }
     return new URL(c.req.url).origin;
@@ -140,18 +140,6 @@ const getCourseSessions = (courseId, includeDeleted = false) => db
     .from(tCourseSessions)
     .where(and(eq(tCourseSessions.courseId, courseId), includeDeleted ? undefined : ne(tCourseSessions.status, DELETED_STATUS)))
     .orderBy(asc(tCourseSessions.sessionNo), asc(tCourseSessions.startDate), asc(tCourseSessions.id));
-router.get("/images/:fileId", async (c) => {
-    try {
-        const fileId = Number(c.req.param("fileId"));
-        if (!Number.isFinite(fileId) || fileId <= 0) {
-            return c.json(fail(c, new Error("valid fileId is required")));
-        }
-        return getCourseImageResponse(fileId);
-    }
-    catch (error) {
-        return c.json(fail(c, error));
-    }
-});
 router.get("/", async (c) => {
     try {
         const q = String(c.req.query("q") ?? "").trim();

@@ -179,10 +179,8 @@ const uploadNoticeImage = async (file: File, uploadedBy: number | null) => {
 
 const withFileUrl = (file: typeof tFiles.$inferSelect) => ({
   ...file,
-  url: file.storageType === "cloudinary" && file.publicUrl
-    ? file.publicUrl
-    : file.storageKey
-    ? `/api/file/files/download?key=${encodeURIComponent(file.storageKey)}`
+  url: file.storageKey
+    ? `/api/files?file_id=${file.id}`
     : "",
 });
 
