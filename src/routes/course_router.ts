@@ -8,7 +8,12 @@ import {
   tFileLinks,
   tUser,
 } from "../db/schema.js";
-import { toSafeUser, withUserRoles } from "../utils/auth_utils.js";
+import {
+  isStaffOrAdminUser,
+  toSafeUser,
+  verifyUserToken,
+  withUserRoles,
+} from "../utils/auth_utils.js";
 import {
   type CourseImageFile,
   getCourseImageRows,
@@ -89,6 +94,15 @@ const fail = (c: Context, error: unknown) => ({
   api: getApiName(c),
   msg: error instanceof Error ? error.message : String(error),
 });
+
+const requireStaffUser = async (c: Context) => {
+  const user = await verifyUserToken(c.req.header("authorization") ?? "");
+  if (await isStaffOrAdminUser(user)) {
+    return user;
+  }
+
+  throw new Error("staff or admin permission is required");
+};
 
 const statusAliasMap = new Map<string, CourseStatus>([
   ["모집중", "모집중"],
@@ -341,6 +355,7 @@ router.get("/:courseId/sessions/:sessionId", async (c) => {
 
 router.get("/:courseId/sessions/:sessionId/enrollments", async (c) => {
   try {
+    await requireStaffUser(c);
     const courseId = Number(c.req.param("courseId"));
     const sessionId = Number(c.req.param("sessionId"));
     if (!Number.isFinite(courseId) || courseId <= 0) {

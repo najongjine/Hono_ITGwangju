@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { and, desc, eq, ilike, ne, or, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { tFileLinks, tFiles, tNotices } from "../db/schema.js";
-import { isAdminUser, toSafeUser, verifyUserToken } from "../utils/auth_utils.js";
+import { isStaffOrAdminUser, toSafeUser, verifyUserToken, } from "../utils/auth_utils.js";
 import { uploadLocalFile } from "../utils/local_file_crud.js";
 import { getCloudinaryCloudName, uploadCloudinaryFile, } from "../utils/cloudinary_file_crud.js";
 import { convertImageToWebp, isImageMimeType } from "../utils/utils.js";
@@ -91,12 +91,12 @@ const readIntegerList = (input, names) => {
         : names.map((name) => input[name]);
     return values.flatMap(parseIntegerListValue);
 };
-const requireAdminUser = async (c) => {
+const requireStaffUser = async (c) => {
     const user = await verifyUserToken(c.req.header("authorization") ?? "");
-    if (await isAdminUser(user)) {
+    if (await isStaffOrAdminUser(user)) {
         return user;
     }
-    throw new Error("admin permission is required");
+    throw new Error("staff or admin permission is required");
 };
 const getFormFiles = (form) => [
     ...form.getAll("images"),
@@ -217,7 +217,7 @@ router.get("/", async (c) => {
     try {
         const includeHidden = isTruthy(c.req.query("includeHidden"));
         if (includeHidden) {
-            await requireAdminUser(c);
+            await requireStaffUser(c);
         }
         const q = String(c.req.query("q") ?? "").trim();
         const where = [
@@ -254,7 +254,7 @@ router.get("/:id", async (c) => {
             return c.json(fail(c, new Error("notice not found")));
         }
         if (!notice.isVisible) {
-            await requireAdminUser(c);
+            await requireStaffUser(c);
         }
         const incrementView = !["false", "0", "n", "no", "off"].includes(String(c.req.query("incrementView") ?? "true").toLowerCase());
         const saved = incrementView
@@ -275,7 +275,7 @@ router.get("/:id", async (c) => {
 });
 router.post("/", async (c) => {
     try {
-        const admin = await requireAdminUser(c);
+        const admin = await requireStaffUser(c);
         const input = await getInput(c);
         const id = Number(readString(input, ["id"], "0"));
         const title = readString(input, ["title"]);
@@ -333,7 +333,7 @@ router.post("/", async (c) => {
 });
 router.put("/:id", async (c) => {
     try {
-        const admin = await requireAdminUser(c);
+        const admin = await requireStaffUser(c);
         const id = Number(c.req.param("id"));
         if (!Number.isFinite(id) || id <= 0) {
             return c.json(fail(c, new Error("valid id is required")));
@@ -376,7 +376,7 @@ router.put("/:id", async (c) => {
 });
 router.patch("/:id", async (c) => {
     try {
-        const admin = await requireAdminUser(c);
+        const admin = await requireStaffUser(c);
         const id = Number(c.req.param("id"));
         if (!Number.isFinite(id) || id <= 0) {
             return c.json(fail(c, new Error("valid id is required")));
@@ -414,7 +414,7 @@ router.patch("/:id", async (c) => {
 });
 router.delete("/:id", async (c) => {
     try {
-        await requireAdminUser(c);
+        await requireStaffUser(c);
         const id = Number(c.req.param("id"));
         if (!Number.isFinite(id) || id <= 0) {
             return c.json(fail(c, new Error("valid id is required")));

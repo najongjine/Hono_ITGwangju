@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import path from "path";
 import {
   deleteLocalFileMetaByStorageKey,
@@ -21,6 +21,7 @@ import {
   uploadLocalFile,
 } from "../utils/local_file_crud.js";
 import { convertImageToWebp, isImageMimeType } from "../utils/utils.js";
+import { isStaffOrAdminUser, verifyUserToken } from "../utils/auth_utils.js";
 
 const router = new Hono();
 
@@ -38,8 +39,18 @@ const fail = (error: unknown) => ({
   message: `error. ${error instanceof Error ? error.message : String(error)}`,
 });
 
+const requireStaffUser = async (c: Context) => {
+  const user = await verifyUserToken(c.req.header("authorization") ?? "");
+  if (await isStaffOrAdminUser(user)) {
+    return user;
+  }
+
+  throw new Error("staff or admin permission is required");
+};
+
 router.get("/files", async (c) => {
   try {
+    await requireStaffUser(c);
     const prefix = String(c.req.query("prefix") ?? "");
     const files = await listLocalFiles(prefix);
 
@@ -51,6 +62,7 @@ router.get("/files", async (c) => {
 
 router.post("/files", async (c) => {
   try {
+    await requireStaffUser(c);
     const form = await c.req.formData();
     const dir = String(form.get("dir") ?? "uploads");
     const files = form.getAll("files");
@@ -107,6 +119,7 @@ router.post("/files", async (c) => {
 
 router.get("/files/info", async (c) => {
   try {
+    await requireStaffUser(c);
     const key = String(c.req.query("key") ?? "");
 
     if (!key) {
@@ -146,6 +159,7 @@ router.get("/files/download", async (c) => {
 
 router.put("/files", async (c) => {
   try {
+    await requireStaffUser(c);
     const form = await c.req.formData();
     const key = String(form.get("key") ?? "");
     const file = form.get("file");
@@ -200,6 +214,7 @@ router.put("/files", async (c) => {
 
 router.post("/files/copy", async (c) => {
   try {
+    await requireStaffUser(c);
     const body = await c.req.json<{
       sourceKey?: string;
       destinationKey?: string;
@@ -237,6 +252,7 @@ router.post("/files/copy", async (c) => {
 
 router.post("/files/move", async (c) => {
   try {
+    await requireStaffUser(c);
     const body = await c.req.json<{
       sourceKey?: string;
       destinationKey?: string;
@@ -267,6 +283,7 @@ router.post("/files/move", async (c) => {
 
 router.delete("/files", async (c) => {
   try {
+    await requireStaffUser(c);
     const key = String(c.req.query("key") ?? "");
 
     if (!key) {
@@ -282,8 +299,13 @@ router.delete("/files", async (c) => {
   }
 });
 
-router.get("/root", (c) => {
-  return c.json(ok({ root: getLocalUploadRoot() }));
+router.get("/root", async (c) => {
+  try {
+    await requireStaffUser(c);
+    return c.json(ok({ root: getLocalUploadRoot() }));
+  } catch (error) {
+    return c.json(fail(error));
+  }
 });
 
 export default router;

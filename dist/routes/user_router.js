@@ -1,8 +1,8 @@
 import { Hono } from "hono";
-import { and, desc, eq, ilike, ne, or } from "drizzle-orm";
+import { and, desc, eq, ilike, ne, or, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { tApply, tCourseSessions, tCourses, tEnrollments, tUser, tUserRoles, } from "../db/schema.js";
-import { createUserToken, createTemporaryPassword, encryptPersonalData, hashPassword, isAdminUser, sendPasswordResetEmail, toSafeUser, verifyPassword, verifyUserToken, withUserRoles, } from "../utils/auth_utils.js";
+import { createUserToken, createTemporaryPassword, encryptPersonalData, hashPassword, isAdminUser, isStaffOrAdminUser, sendPasswordResetEmail, toSafeUser, verifyPassword, verifyUserToken, withUserRoles, } from "../utils/auth_utils.js";
 const router = new Hono();
 const MODULE_NAME = "user_router";
 const ok = (data = null, message = "") => ({
@@ -78,7 +78,7 @@ const normalizeEnrollmentStatus = (value, fallback = "pending") => {
     ]);
     const normalized = aliases.get(text.toLowerCase()) ?? aliases.get(text);
     if (!normalized) {
-        throw new Error("status must be one of: 이수, 탈락, 미선발");
+        throw new Error("status must be one of: pending, approved, rejected, completed");
     }
     return normalized;
 };
@@ -138,6 +138,13 @@ const requireAdminUser = async (c) => {
         return user;
     }
     throw new Error("admin permission is required");
+};
+const requireStaffUser = async (c) => {
+    const user = await verifyUserToken(c.req.header("authorization") ?? "");
+    if (await isStaffOrAdminUser(user)) {
+        return user;
+    }
+    throw new Error("staff or admin permission is required");
 };
 router.post("/register", async (c) => {
     try {
@@ -370,14 +377,20 @@ router.post("/admin/users/:id/password-reset", async (c) => {
         return c.json(fail(c, error));
     }
 });
-router.post("/admin/enrollments/:id", async (c) => {
+const processEnrollment = async (c) => {
     try {
-        await requireAdminUser(c);
-        const enrollmentId = Number(c.req.param("id"));
+        await requireStaffUser(c);
+        const enrollmentId = Number(c.req.query("enrollmentId") ??
+            c.req.query("enrollment_id") ??
+            c.req.query("id") ??
+            c.req.param("id"));
         if (!Number.isFinite(enrollmentId) || enrollmentId <= 0) {
-            return c.json(fail(c, new Error("valid enrollment id is required")));
+            return c.json(fail(c, new Error("valid enrollmentId query parameter is required")));
         }
-        const input = await readJson(c);
+        const input = {
+            ...(await readJson(c)),
+            ...Object.fromEntries(new URL(c.req.url).searchParams.entries()),
+        };
         const courseId = readNumber(input, ["courseId", "course_id"]);
         const sessionId = readNumber(input, ["sessionId", "session_id"]);
         const status = readOptionalString(input, ["status", "approvalStatus", "approval_status"]);
@@ -420,6 +433,87 @@ router.post("/admin/enrollments/:id", async (c) => {
             ...updatedRows[0],
             statusLabel: toEnrollmentStatusLabel(updatedRows[0]?.approvalStatus),
         }));
+    }
+    catch (error) {
+        return c.json(fail(c, error));
+    }
+};
+router.post("/admin/enrollments/process", processEnrollment);
+router.post("/admin/enrollments/:id", processEnrollment);
+router.post("/enrollments/apply", async (c) => {
+    try {
+        const user = await verifyUserToken(c.req.header("authorization") ?? "");
+        const courseId = Number(c.req.query("courseId") ?? c.req.query("course_id"));
+        const sessionId = Number(c.req.query("sessionId") ?? c.req.query("session_id"));
+        if (!Number.isInteger(courseId) || courseId <= 0) {
+            return c.json(fail(c, new Error("valid courseId query parameter is required")));
+        }
+        if (!Number.isInteger(sessionId) || sessionId <= 0) {
+            return c.json(fail(c, new Error("valid sessionId query parameter is required")));
+        }
+        const safeUser = toSafeUser(user);
+        if (!safeUser.realName || !safeUser.phone || !safeUser.email) {
+            return c.json(fail(c, new Error("real name, phone, and email are required before applying")));
+        }
+        const result = await db.transaction(async (tx) => {
+            const course = (await tx
+                .select()
+                .from(tCourses)
+                .where(and(eq(tCourses.id, courseId), ne(tCourses.status, "deleted")))
+                .limit(1))[0];
+            if (!course || course.isVisible === false || course.status === "마감") {
+                throw new Error("course is not available for application");
+            }
+            const session = (await tx
+                .select()
+                .from(tCourseSessions)
+                .where(and(eq(tCourseSessions.id, sessionId), eq(tCourseSessions.courseId, courseId), ne(tCourseSessions.status, "deleted")))
+                .limit(1))[0];
+            if (!session || session.status !== "모집중") {
+                throw new Error("course session is not recruiting");
+            }
+            const existing = (await tx
+                .select()
+                .from(tEnrollments)
+                .where(and(eq(tEnrollments.userId, user.id), eq(tEnrollments.sessionId, sessionId)))
+                .limit(1))[0];
+            if (existing && existing.applyStatus !== "cancelled" && existing.applyStatus !== "deleted") {
+                throw new Error("already applied to this course session");
+            }
+            const countRows = await tx
+                .select({ count: sql `count(*)::int` })
+                .from(tEnrollments)
+                .where(and(eq(tEnrollments.sessionId, sessionId), ne(tEnrollments.applyStatus, "cancelled"), ne(tEnrollments.applyStatus, "deleted")));
+            const enrollmentCount = Number(countRows[0]?.count ?? 0);
+            if (session.capacity !== null && enrollmentCount >= session.capacity) {
+                throw new Error("course session capacity has been reached");
+            }
+            const now = new Date().toISOString();
+            const values = {
+                userId: user.id,
+                courseId,
+                sessionId,
+                applicantName: safeUser.realName,
+                applicantPhone: safeUser.phone,
+                applicantEmail: safeUser.email ?? "",
+                applyStatus: "submitted",
+                approvalStatus: "pending",
+                appliedAt: now,
+                updatedAt: now,
+            };
+            const rows = existing
+                ? await tx
+                    .update(tEnrollments)
+                    .set(values)
+                    .where(eq(tEnrollments.id, existing.id))
+                    .returning()
+                : await tx.insert(tEnrollments).values(values).returning();
+            return rows[0];
+        });
+        return c.json(ok({
+            ...result,
+            statusLabel: toEnrollmentStatusLabel(result.approvalStatus),
+        }, "application submitted and pending approval"));
     }
     catch (error) {
         return c.json(fail(c, error));

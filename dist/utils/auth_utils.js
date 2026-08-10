@@ -79,6 +79,13 @@ export const isAdminUser = async (user) => {
     const roles = "roles" in user ? normalizeRoles(user.roles ?? []) : await getUserRoles(user.id);
     return roles.includes("admin");
 };
+export const isStaffOrAdminUser = async (user) => {
+    if (!user) {
+        return false;
+    }
+    const roles = "roles" in user ? normalizeRoles(user.roles ?? []) : await getUserRoles(user.id);
+    return roles.includes("admin") || roles.includes("staff");
+};
 export const createTemporaryPassword = () => {
     const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
     const bytes = randomBytes(10);
