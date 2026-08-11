@@ -112,26 +112,24 @@ export const tEnrollments = pgTable("t_enrollments", {
 	unique("t_enrollments_user_session_uk").on(table.userId, table.sessionId),
 ]);
 
-/** 학원 공지사항. status: published | deleted */
+/** 학원 공지사항. status: published | hidden */
 export const tNotices = pgTable("t_notices", {
 	id: serial().primaryKey().notNull(),
 	title: varchar().notNull(),
 	content: text().default(""),
-	authorId: integer("author_id"),
-	authorName: varchar("author_name").default(""),
+	userId: integer("user_id"),
 	viewCount: integer("view_count").default(0),
-	isVisible: boolean("is_visible").default(true),
 	isPinned: boolean("is_pinned").default(false),
 	status: varchar().default('published'),
 	publishedAt: timestamp("published_at", { mode: 'string' }),
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
 }, (table) => [
-	index("idx_t_notices_visible_pinned").on(table.isVisible, table.isPinned, table.createdAt),
+	index("idx_t_notices_status_pinned").on(table.status, table.isPinned, table.createdAt),
 	foreignKey({
-			columns: [table.authorId],
+			columns: [table.userId],
 			foreignColumns: [tUser.id],
-			name: "t_notices_author_id_fkey"
+			name: "t_notices_user_id_fkey"
 		}).onDelete("set null"),
 ]);
 

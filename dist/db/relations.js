@@ -72,7 +72,7 @@ export const tEnrollmentsRelations = relations(tEnrollments, ({ one }) => ({
 }));
 export const tNoticesRelations = relations(tNotices, ({ one }) => ({
     tUser: one(tUser, {
-        fields: [tNotices.authorId],
+        fields: [tNotices.userId],
         references: [tUser.id]
     }),
 }));

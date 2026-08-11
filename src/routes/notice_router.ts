@@ -4,7 +4,6 @@ import { db } from "../db/index.js";
 import { tFileLinks, tFiles, tNotices } from "../db/schema.js";
 import {
   isStaffOrAdminUser,
-  toSafeUser,
   verifyUserToken,
 } from "../utils/auth_utils.js";
 import { uploadLocalFile } from "../utils/local_file_crud.js";
@@ -18,6 +17,18 @@ const router = new Hono();
 const MODULE_NAME = "notice_router";
 const NOTICE_TABLE = "t_notices";
 const NOTICE_IMAGE_ROLE = "notice_image";
+const NOTICE_STATUS_VALUES = ["published", "hidden"] as const;
+type NoticeStatus = (typeof NOTICE_STATUS_VALUES)[number];
+
+const normalizeNoticeStatus = (
+  value: string | null | undefined,
+  fallback: NoticeStatus = "published"
+): NoticeStatus => {
+  const status = String(value ?? "").trim().toLowerCase();
+  if (!status) return fallback;
+  if (NOTICE_STATUS_VALUES.includes(status as NoticeStatus)) return status as NoticeStatus;
+  throw new Error(`status must be one of: ${NOTICE_STATUS_VALUES.join(", ")}`);
+};
 const NOTICE_IMAGE_ORDER_FIELDS = [
   "imageOrders",
   "imageOrder",
@@ -299,8 +310,7 @@ router.get("/", async (c) => {
 
     const q = String(c.req.query("q") ?? "").trim();
     const where = [
-      includeHidden ? undefined : eq(tNotices.isVisible, true),
-      ne(tNotices.status, "deleted"),
+      includeHidden ? undefined : eq(tNotices.status, "published"),
       q
         ? or(ilike(tNotices.title, `%${q}%`), ilike(tNotices.content, `%${q}%`))
         : undefined,
@@ -334,10 +344,10 @@ router.get("/:id", async (c) => {
 
     const rows = await db.select().from(tNotices).where(eq(tNotices.id, id)).limit(1);
     const notice = rows[0];
-    if (!notice || notice.status === "deleted") {
+    if (!notice) {
       return c.json(fail(c, new Error("notice not found")));
     }
-    if (!notice.isVisible) {
+    if (notice.status !== "published") {
       await requireStaffUser(c);
     }
 
@@ -370,11 +380,6 @@ router.post("/", async (c) => {
     const id = Number(readString(input, ["id"], "0"));
     const title = readString(input, ["title"]);
     const content = readString(input, ["content"]);
-    const authorName =
-      readString(input, ["authorName", "author_name"]) ||
-      toSafeUser(admin).realName ||
-      admin.email ||
-      "";
 
     if (!Number.isFinite(id) || id < 0) {
       return c.json(fail(c, new Error("id must be 0 or a positive number")));
@@ -398,16 +403,14 @@ router.post("/", async (c) => {
     }
 
     const now = new Date().toISOString();
-    const status = readString(input, ["status"], "published");
+    const status = normalizeNoticeStatus(readString(input, ["status"], "published"));
     const publishedAt =
       readString(input, ["publishedAt", "published_at"]) ||
       (status === "published" ? now : null);
     const payload = {
       title,
       content,
-      authorId: admin.id,
-      authorName,
-      isVisible: isTruthy(readString(input, ["isVisible", "is_visible"], ""), true),
+      userId: admin.id,
       isPinned: isTruthy(readString(input, ["isPinned", "is_pinned"], ""), false),
       status,
       publishedAt,
@@ -453,7 +456,7 @@ router.put("/:id", async (c) => {
     const existing = (
       await db.select().from(tNotices).where(eq(tNotices.id, id)).limit(1)
     )[0];
-    if (!existing || existing.status === "deleted") {
+    if (!existing) {
       return c.json(fail(c, new Error("notice not found")));
     }
 
@@ -463,27 +466,21 @@ router.put("/:id", async (c) => {
     }
 
     const now = new Date().toISOString();
+    const status = normalizeNoticeStatus(
+      readString(input, ["status"], existing.status ?? "published")
+    );
     const saved = (
       await db
         .update(tNotices)
         .set({
           title,
           content: readString(input, ["content"], existing.content ?? ""),
-          authorId: admin.id,
-          authorName:
-            readString(input, ["authorName", "author_name"], existing.authorName ?? "") ||
-            toSafeUser(admin).realName ||
-            admin.email ||
-            "",
-          isVisible: isTruthy(
-            readString(input, ["isVisible", "is_visible"], String(existing.isVisible)),
-            existing.isVisible ?? true
-          ),
+          userId: admin.id,
           isPinned: isTruthy(
             readString(input, ["isPinned", "is_pinned"], String(existing.isPinned)),
             existing.isPinned ?? false
           ),
-          status: readString(input, ["status"], existing.status ?? "published"),
+          status,
           publishedAt:
             readString(input, ["publishedAt", "published_at"], existing.publishedAt ?? "") ||
             existing.publishedAt,
@@ -519,31 +516,25 @@ router.patch("/:id", async (c) => {
     const existing = (
       await db.select().from(tNotices).where(eq(tNotices.id, id)).limit(1)
     )[0];
-    if (!existing || existing.status === "deleted") {
+    if (!existing) {
       return c.json(fail(c, new Error("notice not found")));
     }
 
+    const status = normalizeNoticeStatus(
+      readString(input, ["status"], existing.status ?? "published")
+    );
     const saved = (
       await db
         .update(tNotices)
         .set({
           title: readString(input, ["title"], existing.title),
           content: readString(input, ["content"], existing.content ?? ""),
-          authorId: admin.id,
-          authorName:
-            readString(input, ["authorName", "author_name"], existing.authorName ?? "") ||
-            toSafeUser(admin).realName ||
-            admin.email ||
-            "",
-          isVisible: isTruthy(
-            readString(input, ["isVisible", "is_visible"], String(existing.isVisible)),
-            existing.isVisible ?? true
-          ),
+          userId: admin.id,
           isPinned: isTruthy(
             readString(input, ["isPinned", "is_pinned"], String(existing.isPinned)),
             existing.isPinned ?? false
           ),
-          status: readString(input, ["status"], existing.status ?? "published"),
+          status,
           publishedAt:
             readString(input, ["publishedAt", "published_at"], existing.publishedAt ?? "") ||
             existing.publishedAt,
@@ -575,21 +566,28 @@ router.delete("/:id", async (c) => {
       return c.json(fail(c, new Error("valid id is required")));
     }
 
-    const rows = await db
-      .update(tNotices)
-      .set({
-        status: "deleted",
-        isVisible: false,
-        updatedAt: new Date().toISOString(),
-      })
-      .where(eq(tNotices.id, id))
-      .returning();
+    const deleted = await db.transaction(async (tx) => {
+      const row = (
+        await tx.delete(tNotices).where(eq(tNotices.id, id)).returning()
+      )[0];
+      if (!row) return null;
 
-    if (!rows[0]) {
+      await tx
+        .delete(tFileLinks)
+        .where(
+          and(
+            eq(tFileLinks.targetTable, NOTICE_TABLE),
+            eq(tFileLinks.targetId, id)
+          )
+        );
+      return row;
+    });
+
+    if (!deleted) {
       return c.json(fail(c, new Error("notice not found")));
     }
 
-    return c.json(ok(rows[0]));
+    return c.json(ok(deleted));
   } catch (error) {
     return c.json(fail(c, error));
   }
