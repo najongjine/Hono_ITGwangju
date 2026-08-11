@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm/relations";
-import { tCourses, tCourseSessions, tUser, tFiles, tEnrollments, tNotices, tPosts, tTest1, tTest1Child, tInquiries, tFileLinks, tUserRoles, tInquiryReplies, tBanner } from "./schema.js";
+import { tCourses, tCourseSessions, tUser, tFiles, tEnrollments, tNotices, tTest1, tTest1Child, tInquiries, tFileLinks, tUserRoles, tInquiryReplies, tBanner } from "./schema.js";
 
 export const tCourseSessionsRelations = relations(tCourseSessions, ({one, many}) => ({
 	tCourse: one(tCourses, {
@@ -37,10 +37,6 @@ export const tUserRelations = relations(tUser, ({many}) => ({
 	}),
 	tEnrollments: many(tEnrollments),
 	tNotices: many(tNotices),
-	tPosts: many(tPosts),
-	tInquiries_answeredBy: many(tInquiries, {
-		relationName: "tInquiries_answeredBy_tUser_id"
-	}),
 	tInquiries_userId: many(tInquiries, {
 		relationName: "tInquiries_userId_tUser_id"
 	}),
@@ -87,13 +83,6 @@ export const tNoticesRelations = relations(tNotices, ({one}) => ({
 	}),
 }));
 
-export const tPostsRelations = relations(tPosts, ({one}) => ({
-	tUser: one(tUser, {
-		fields: [tPosts.authorId],
-		references: [tUser.id]
-	}),
-}));
-
 export const tTest1ChildRelations = relations(tTest1Child, ({one}) => ({
 	tTest1: one(tTest1, {
 		fields: [tTest1Child.test1Id],
@@ -106,11 +95,6 @@ export const tTest1Relations = relations(tTest1, ({many}) => ({
 }));
 
 export const tInquiriesRelations = relations(tInquiries, ({one, many}) => ({
-	tUser_answeredBy: one(tUser, {
-		fields: [tInquiries.answeredBy],
-		references: [tUser.id],
-		relationName: "tInquiries_answeredBy_tUser_id"
-	}),
 	tUser_userId: one(tUser, {
 		fields: [tInquiries.userId],
 		references: [tUser.id],

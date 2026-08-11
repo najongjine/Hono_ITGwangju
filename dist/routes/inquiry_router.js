@@ -1,8 +1,8 @@
 import { Hono } from "hono";
-import { and, asc, desc, eq, ilike, ne, or } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, or } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { tInquiries, tInquiryReplies } from "../db/schema.js";
-import { decryptPersonalData, encryptPersonalData, isAdminUser, verifyUserToken, } from "../utils/auth_utils.js";
+import { tInquiries, tInquiryReplies, tUser } from "../db/schema.js";
+import { isStaffOrAdminUser, toSafeUser, verifyUserToken, } from "../utils/auth_utils.js";
 const router = new Hono();
 const MODULE_NAME = "inquiry_router";
 const ok = (data = null, message = "") => ({
@@ -45,12 +45,12 @@ const readString = (input, names, fallback = "") => {
     }
     return fallback;
 };
-const requireAdminUser = async (c) => {
+const requireStaffUser = async (c) => {
     const user = await verifyUserToken(c.req.header("authorization") ?? "");
-    if (await isAdminUser(user)) {
+    if (await isStaffOrAdminUser(user)) {
         return user;
     }
-    throw new Error("admin permission is required");
+    throw new Error("staff or admin permission is required");
 };
 const getOptionalUser = async (c) => {
     try {
@@ -65,53 +65,50 @@ const canAccessInquiry = async (c, inquiryUserId) => {
     if (!user) {
         return false;
     }
-    if ((await isAdminUser(user)) || user.id === inquiryUserId) {
+    if ((await isStaffOrAdminUser(user)) || user.id === inquiryUserId) {
         return true;
     }
     return false;
 };
-const safeInquiry = (inquiry) => ({
+const safeInquiry = (inquiry, user = null) => ({
     ...inquiry,
-    name: decryptPersonalData(inquiry.name),
-    phone: decryptPersonalData(inquiry.phone),
+    user: user ? toSafeUser(user) : null,
 });
+const getInquiryUser = async (userId) => (await db.select().from(tUser).where(eq(tUser.id, userId)).limit(1))[0] ?? null;
 const safeInquiryReply = (reply) => reply;
 const getInquiryReplies = async (inquiryId) => {
     const rows = await db
         .select()
         .from(tInquiryReplies)
-        .where(and(eq(tInquiryReplies.inquiryId, inquiryId), ne(tInquiryReplies.status, "deleted")))
+        .where(eq(tInquiryReplies.inquiryId, inquiryId))
         .orderBy(asc(tInquiryReplies.createdAt), asc(tInquiryReplies.id));
     return rows.map(safeInquiryReply);
 };
 const safeInquiryWithReplies = async (inquiry) => ({
-    ...safeInquiry(inquiry),
+    ...safeInquiry(inquiry, await getInquiryUser(inquiry.userId)),
     replies: await getInquiryReplies(inquiry.id),
 });
 router.get("/", async (c) => {
     try {
-        await requireAdminUser(c);
+        await requireStaffUser(c);
         const q = String(c.req.query("q") ?? "").trim();
-        const status = String(c.req.query("status") ?? "").trim();
-        const includeDeleted = ["true", "1", "y", "yes", "on"].includes(String(c.req.query("includeDeleted") ?? "").toLowerCase());
         const parsedLimit = Number(c.req.query("limit") ?? 100);
         const limit = Number.isFinite(parsedLimit)
             ? Math.min(Math.max(Math.floor(parsedLimit), 1), 200)
             : 100;
         const where = [
-            includeDeleted ? undefined : ne(tInquiries.status, "deleted"),
-            status ? eq(tInquiries.status, status) : undefined,
             q
-                ? or(ilike(tInquiries.title, `%${q}%`), ilike(tInquiries.content, `%${q}%`), ilike(tInquiries.email, `%${q}%`))
+                ? or(ilike(tInquiries.title, `%${q}%`), ilike(tInquiries.content, `%${q}%`), ilike(tUser.email, `%${q}%`))
                 : undefined,
         ].filter(Boolean);
         const rows = await db
-            .select()
+            .select({ inquiry: tInquiries, user: tUser })
             .from(tInquiries)
+            .innerJoin(tUser, eq(tUser.id, tInquiries.userId))
             .where(where.length > 0 ? and(...where) : undefined)
             .orderBy(desc(tInquiries.createdAt), desc(tInquiries.id))
             .limit(limit);
-        return c.json(ok(rows.map(safeInquiry)));
+        return c.json(ok(rows.map(({ inquiry, user }) => safeInquiry(inquiry, user))));
     }
     catch (error) {
         return c.json(fail(c, error));
@@ -124,7 +121,7 @@ router.get("/:id", async (c) => {
             return c.json(fail(c, new Error("valid id is required")));
         }
         const row = (await db.select().from(tInquiries).where(eq(tInquiries.id, id)).limit(1))[0];
-        if (!row || row.status === "deleted") {
+        if (!row) {
             return c.json(fail(c, new Error("inquiry not found")));
         }
         if (!(await canAccessInquiry(c, row.userId))) {
@@ -139,21 +136,9 @@ router.get("/:id", async (c) => {
 router.post("/", async (c) => {
     try {
         const input = await getInput(c);
-        const user = await getOptionalUser(c);
-        const name = readString(input, ["name", "realName", "real_name"]) || "";
-        const phone = readString(input, ["phone"]) || "";
-        const email = readString(input, ["email"]).toLowerCase();
+        const user = await verifyUserToken(c.req.header("authorization") ?? "");
         const title = readString(input, ["title"]);
         const content = readString(input, ["content"]);
-        if (!name) {
-            return c.json(fail(c, new Error("name is required")));
-        }
-        if (!phone) {
-            return c.json(fail(c, new Error("phone is required")));
-        }
-        if (!email) {
-            return c.json(fail(c, new Error("email is required")));
-        }
         if (!title) {
             return c.json(fail(c, new Error("title is required")));
         }
@@ -163,16 +148,12 @@ router.post("/", async (c) => {
         const rows = await db
             .insert(tInquiries)
             .values({
-            userId: user?.id ?? null,
-            name: encryptPersonalData(name),
-            phone: encryptPersonalData(phone),
-            email,
+            userId: user.id,
             title,
             content,
-            status: "waiting",
         })
             .returning();
-        return c.json(ok(safeInquiry(rows[0])));
+        return c.json(ok(safeInquiry(rows[0], user)));
     }
     catch (error) {
         return c.json(fail(c, error));
@@ -185,7 +166,7 @@ router.put("/:id", async (c) => {
             return c.json(fail(c, new Error("valid id is required")));
         }
         const existing = (await db.select().from(tInquiries).where(eq(tInquiries.id, id)).limit(1))[0];
-        if (!existing || existing.status === "deleted") {
+        if (!existing) {
             return c.json(fail(c, new Error("inquiry not found")));
         }
         if (!(await canAccessInquiry(c, existing.userId))) {
@@ -195,16 +176,13 @@ router.put("/:id", async (c) => {
         const rows = await db
             .update(tInquiries)
             .set({
-            name: encryptPersonalData(readString(input, ["name", "realName", "real_name"], safeInquiry(existing).name ?? "")),
-            phone: encryptPersonalData(readString(input, ["phone"], safeInquiry(existing).phone ?? "")),
-            email: readString(input, ["email"], existing.email ?? "").toLowerCase(),
             title: readString(input, ["title"], existing.title ?? ""),
             content: readString(input, ["content"], existing.content ?? ""),
             updatedAt: new Date().toISOString(),
         })
             .where(eq(tInquiries.id, id))
             .returning();
-        return c.json(ok(safeInquiry(rows[0])));
+        return c.json(ok(await safeInquiryWithReplies(rows[0])));
     }
     catch (error) {
         return c.json(fail(c, error));
@@ -216,19 +194,16 @@ router.patch("/:id", async (c) => {
         if (!Number.isFinite(id) || id <= 0) {
             return c.json(fail(c, new Error("valid id is required")));
         }
-        const admin = await requireAdminUser(c);
+        const staff = await requireStaffUser(c);
         const input = await getInput(c);
         const answer = readString(input, ["answer", "content"]);
-        const status = readString(input, ["status"], answer ? "answered" : "waiting");
-        const answeredAt = answer ? new Date().toISOString() : null;
+        if (!answer) {
+            return c.json(fail(c, new Error("answer is required")));
+        }
         const rows = await db.transaction(async (tx) => {
             const updated = await tx
                 .update(tInquiries)
                 .set({
-                answer,
-                status,
-                answeredBy: answer ? admin.id : null,
-                answeredAt,
                 updatedAt: new Date().toISOString(),
             })
                 .where(eq(tInquiries.id, id))
@@ -236,8 +211,7 @@ router.patch("/:id", async (c) => {
             if (answer && updated[0]) {
                 await tx.insert(tInquiryReplies).values({
                     inquiryId: id,
-                    userId: admin.id,
-                    authorRole: "admin",
+                    userId: staff.id,
                     content: answer,
                 });
             }
@@ -258,7 +232,7 @@ router.post("/:id/answer", async (c) => {
         if (!Number.isFinite(id) || id <= 0) {
             return c.json(fail(c, new Error("valid id is required")));
         }
-        const admin = await requireAdminUser(c);
+        const staff = await requireStaffUser(c);
         const input = await getInput(c);
         const answer = readString(input, ["answer", "content"]);
         if (!answer) {
@@ -268,10 +242,6 @@ router.post("/:id/answer", async (c) => {
             const updated = await tx
                 .update(tInquiries)
                 .set({
-                answer,
-                status: "answered",
-                answeredBy: admin.id,
-                answeredAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
             })
                 .where(eq(tInquiries.id, id))
@@ -279,8 +249,7 @@ router.post("/:id/answer", async (c) => {
             if (updated[0]) {
                 await tx.insert(tInquiryReplies).values({
                     inquiryId: id,
-                    userId: admin.id,
-                    authorRole: "admin",
+                    userId: staff.id,
                     content: answer,
                 });
             }
@@ -302,7 +271,7 @@ router.get("/:id/replies", async (c) => {
             return c.json(fail(c, new Error("valid id is required")));
         }
         const inquiry = (await db.select().from(tInquiries).where(eq(tInquiries.id, id)).limit(1))[0];
-        if (!inquiry || inquiry.status === "deleted") {
+        if (!inquiry) {
             return c.json(fail(c, new Error("inquiry not found")));
         }
         if (!(await canAccessInquiry(c, inquiry.userId))) {
@@ -321,7 +290,7 @@ router.post("/:id/replies", async (c) => {
             return c.json(fail(c, new Error("valid id is required")));
         }
         const inquiry = (await db.select().from(tInquiries).where(eq(tInquiries.id, id)).limit(1))[0];
-        if (!inquiry || inquiry.status === "deleted") {
+        if (!inquiry) {
             return c.json(fail(c, new Error("inquiry not found")));
         }
         const user = await getOptionalUser(c);
@@ -333,31 +302,16 @@ router.post("/:id/replies", async (c) => {
         if (!content) {
             return c.json(fail(c, new Error("content is required")));
         }
-        const admin = await isAdminUser(user);
         const saved = await db.transaction(async (tx) => {
             const reply = (await tx
                 .insert(tInquiryReplies)
                 .values({
                 inquiryId: id,
                 userId: user?.id ?? null,
-                authorRole: admin ? "admin" : "user",
                 content,
             })
                 .returning())[0];
-            await tx
-                .update(tInquiries)
-                .set({
-                status: admin ? "answered" : "waiting",
-                ...(admin
-                    ? {
-                        answer: content,
-                        answeredBy: user?.id ?? null,
-                        answeredAt: new Date().toISOString(),
-                    }
-                    : {}),
-                updatedAt: new Date().toISOString(),
-            })
-                .where(eq(tInquiries.id, id));
+            await tx.update(tInquiries).set({ updatedAt: new Date().toISOString() }).where(eq(tInquiries.id, id));
             return reply;
         });
         return c.json(ok(safeInquiryReply(saved)));
@@ -377,28 +331,24 @@ router.delete("/:id/replies/:replyId", async (c) => {
             return c.json(fail(c, new Error("valid replyId is required")));
         }
         const inquiry = (await db.select().from(tInquiries).where(eq(tInquiries.id, id)).limit(1))[0];
-        if (!inquiry || inquiry.status === "deleted") {
+        if (!inquiry) {
             return c.json(fail(c, new Error("inquiry not found")));
         }
         const user = await getOptionalUser(c);
-        const admin = await isAdminUser(user);
+        const staff = await isStaffOrAdminUser(user);
         const reply = (await db
             .select()
             .from(tInquiryReplies)
-            .where(and(eq(tInquiryReplies.id, replyId), eq(tInquiryReplies.inquiryId, id), ne(tInquiryReplies.status, "deleted")))
+            .where(and(eq(tInquiryReplies.id, replyId), eq(tInquiryReplies.inquiryId, id)))
             .limit(1))[0];
         if (!reply) {
             return c.json(fail(c, new Error("reply not found")));
         }
-        if (!admin && (!user || reply.userId !== user.id)) {
+        if (!staff && (!user || reply.userId !== user.id)) {
             return c.json(fail(c, new Error("permission is required")));
         }
         const rows = await db
-            .update(tInquiryReplies)
-            .set({
-            status: "deleted",
-            updatedAt: new Date().toISOString(),
-        })
+            .delete(tInquiryReplies)
             .where(eq(tInquiryReplies.id, replyId))
             .returning();
         return c.json(ok(safeInquiryReply(rows[0])));
@@ -420,15 +370,15 @@ router.delete("/:id", async (c) => {
         if (!(await canAccessInquiry(c, existing.userId))) {
             return c.json(fail(c, new Error("permission is required")));
         }
+        const response = await safeInquiryWithReplies(existing);
         const rows = await db
-            .update(tInquiries)
-            .set({
-            status: "deleted",
-            updatedAt: new Date().toISOString(),
-        })
+            .delete(tInquiries)
             .where(eq(tInquiries.id, id))
             .returning();
-        return c.json(ok(safeInquiry(rows[0])));
+        if (!rows[0]) {
+            return c.json(fail(c, new Error("inquiry not found")));
+        }
+        return c.json(ok(response));
     }
     catch (error) {
         return c.json(fail(c, error));

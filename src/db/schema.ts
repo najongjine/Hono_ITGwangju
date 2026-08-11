@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm"
 
 
 
+/** 과정별 모집·교육 회차. status: 모집중 | 운영중 | 마감 | deleted */
 export const tCourseSessions = pgTable("t_course_sessions", {
 	id: serial().primaryKey().notNull(),
 	courseId: integer("course_id").notNull(),
@@ -26,6 +27,7 @@ export const tCourseSessions = pgTable("t_course_sessions", {
 		}).onDelete("cascade"),
 ]);
 
+/** 교육 과정 기본 정보. status: 모집중 | 운영중 | 마감 | deleted */
 export const tCourses = pgTable("t_courses", {
 	id: serial().primaryKey().notNull(),
 	courseName: varchar("course_name").notNull(),
@@ -58,6 +60,7 @@ export const tCourses = pgTable("t_courses", {
 		}).onDelete("set null"),
 ]);
 
+/** 로그인 계정과 회원 연락처. status: active | inactive */
 export const tUser = pgTable("t_user", {
 	id: serial().primaryKey().notNull(),
 	provider: varchar().default('google'),
@@ -77,6 +80,7 @@ export const tUser = pgTable("t_user", {
 	unique("t_user_email_uk").on(table.email),
 ]);
 
+/** 회원의 과정 회차 신청. status: pending | approved | rejected */
 export const tEnrollments = pgTable("t_enrollments", {
 	id: serial().primaryKey().notNull(),
 	userId: integer("user_id").notNull(),
@@ -108,6 +112,7 @@ export const tEnrollments = pgTable("t_enrollments", {
 	unique("t_enrollments_user_session_uk").on(table.userId, table.sessionId),
 ]);
 
+/** 학원 공지사항. status: published | deleted */
 export const tNotices = pgTable("t_notices", {
 	id: serial().primaryKey().notNull(),
 	title: varchar().notNull(),
@@ -130,27 +135,7 @@ export const tNotices = pgTable("t_notices", {
 		}).onDelete("set null"),
 ]);
 
-export const tPosts = pgTable("t_posts", {
-	id: serial().primaryKey().notNull(),
-	category: varchar().default('general').notNull(),
-	title: varchar().notNull(),
-	content: text().default("").notNull(),
-	authorId: integer("author_id"),
-	authorName: varchar("author_name").default("").notNull(),
-	viewCount: integer("view_count").default(0).notNull(),
-	isVisible: boolean("is_visible").default(true).notNull(),
-	status: varchar().default('published').notNull(),
-	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
-	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
-}, (table) => [
-	index("idx_t_posts_category_status").using("btree", table.category.asc().nullsLast().op("text_ops"), table.status.asc().nullsLast().op("text_ops")),
-	foreignKey({
-			columns: [table.authorId],
-			foreignColumns: [tUser.id],
-			name: "t_posts_author_id_fkey"
-		}).onDelete("set null"),
-]);
-
+/** 개발용 테스트 부모 데이터 */
 export const tTest1 = pgTable("t_test1", {
 	id: integer().primaryKey().generatedAlwaysAsIdentity({ name: "t_test1_id_seq", startWith: 1, increment: 1, minValue: 1, maxValue: 2147483647, cache: 1 }),
 	title: varchar().default(""),
@@ -158,6 +143,7 @@ export const tTest1 = pgTable("t_test1", {
 	createdDt: timestamp("created_dt", { withTimezone: true, mode: 'string' }).defaultNow(),
 });
 
+/** 개발용 테스트 자식 데이터 */
 export const tTest1Child = pgTable("t_test1_child", {
 	id: integer().primaryKey().generatedAlwaysAsIdentity({ name: "t_test1_child_id_seq", startWith: 1, increment: 1, minValue: 1, maxValue: 2147483647, cache: 1 }),
 	comment: varchar().default(""),
@@ -171,34 +157,23 @@ export const tTest1Child = pgTable("t_test1_child", {
 		}).onUpdate("cascade").onDelete("cascade"),
 ]);
 
+/** 로그인 회원이 작성한 문의 원문 */
 export const tInquiries = pgTable("t_inquiries", {
 	id: serial().primaryKey().notNull(),
-	userId: integer("user_id"),
-	name: varchar().default(""),
-	phone: varchar().default(""),
-	email: varchar().default(""),
+	userId: integer("user_id").notNull(),
 	title: varchar(),
 	content: text().default(""),
-	answer: text().default(""),
-	answeredBy: integer("answered_by"),
-	answeredAt: timestamp("answered_at", { mode: 'string' }),
-	status: varchar().default('waiting'),
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
 	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
 }, (table) => [
-	index("idx_t_inquiries_status").using("btree", table.status.asc().nullsLast().op("text_ops")),
-	foreignKey({
-			columns: [table.answeredBy],
-			foreignColumns: [tUser.id],
-			name: "t_inquiries_answered_by_fkey"
-		}).onDelete("set null"),
 	foreignKey({
 			columns: [table.userId],
 			foreignColumns: [tUser.id],
 			name: "t_inquiries_user_id_fkey"
-		}).onDelete("set null"),
+		}).onDelete("restrict"),
 ]);
 
+/** 업로드 파일 메타데이터. storage_type: local | cloudinary, status: active | deleted */
 export const tFiles = pgTable("t_files", {
 	id: integer().primaryKey().generatedAlwaysAsIdentity({ name: "t_files_id_seq", startWith: 1, increment: 1, minValue: 1, maxValue: 2147483647, cache: 1 }),
 	originalName: varchar("original_name").default(""),
@@ -224,6 +199,7 @@ export const tFiles = pgTable("t_files", {
 		}).onDelete("set null"),
 ]);
 
+/** 파일과 과정·공지 등 업무 데이터의 연결 */
 export const tFileLinks = pgTable("t_file_links", {
 	id: serial().primaryKey().notNull(),
 	fileId: integer("file_id").notNull(),
@@ -244,6 +220,7 @@ export const tFileLinks = pgTable("t_file_links", {
 	unique("t_file_links_target_uk").on(table.fileId, table.targetTable, table.targetId, table.fileRole),
 ]);
 
+/** 회원 권한. role_name: user | staff | admin */
 export const tUserRoles = pgTable("t_user_roles", {
 	id: serial().primaryKey().notNull(),
 	userId: integer("user_id").notNull(),
@@ -257,13 +234,12 @@ export const tUserRoles = pgTable("t_user_roles", {
 		}).onDelete("cascade"),
 ]);
 
+/** 문의에 작성된 사용자·직원 답글 */
 export const tInquiryReplies = pgTable("t_inquiry_replies", {
 	id: serial().primaryKey().notNull(),
 	inquiryId: integer("inquiry_id").notNull(),
 	userId: integer("user_id"),
-	authorRole: varchar("author_role").default('user').notNull(),
 	content: text().default("").notNull(),
-	status: varchar().default('active').notNull(),
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
 }, (table) => [
@@ -280,6 +256,7 @@ export const tInquiryReplies = pgTable("t_inquiry_replies", {
 		}).onDelete("set null"),
 ]);
 
+/** 홈페이지 노출 배너. status: active | deleted */
 export const tBanner = pgTable("t_banner", {
 	id: serial().primaryKey().notNull(),
 	title: varchar().default(""),

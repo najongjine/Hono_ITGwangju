@@ -1,255 +1,226 @@
-t_user
-회원/관리자 정보
-구글 로그인한 사람의 이메일, 이름, 권한 같은 정보를 저장
+# IT광주 학원 DB 구조 설명
 
-t_courses
-과정 종류
-예: 웹디자인 과정, 컴퓨터활용능력 과정, 영상편집 과정
+기준 DB: .env.development / Neon PostgreSQL
+갱신일: 2026-08-11
 
-t_course_sessions
-과정의 기수/회차
-예: 웹디자인 과정 1기, 2기, 2026년 6월 개강반
+표기:
+- NOT NULL: 필수 값
+- NULL: 선택 값
+- FK: 다른 테이블을 참조하는 외래키
 
-t_enrollments
-수강 신청 기록
-누가 어떤 과정의 어떤 기수에 신청했는지 저장
+============================================================
 
-t_apply
-신청서 상세 내용
-신청자가 입력한 이름, 연락처, 주소, 생년월일, 신청 내용 등
+## t_user
+로그인 계정과 회원 기본정보
 
-t_files
-파일 원본 정보
-업로드한 파일명, 저장 경로, Supabase Storage 주소, 파일 크기 등
+- id: integer, NOT NULL, PK - 회원 식별자
+- provider: varchar, NULL, 기본값 google - 가입 제공자(local, google 등)
+- provider_user_id: varchar, NULL - 외부 로그인 제공자의 회원 식별자
+- email: varchar, NULL, UNIQUE - 회원 이메일
+- profile_image_url: varchar, NULL - 프로필 이미지 URL
+- status: varchar, NULL, 기본값 active - active(사용), inactive(비활성)
+- last_login_at: timestamp, NULL - 마지막 로그인 시각
+- created_at: timestamp, NULL - 생성 시각
+- updated_at: timestamp, NULL - 수정 시각
+- username: varchar, NULL - 로그인 아이디
+- password: varchar, NULL - 해시 처리된 비밀번호
+- real_name: varchar, NULL - 암호화된 회원 실명
+- phone: varchar, NULL - 암호화된 회원 연락처
 
-t_file_links
-파일 연결 정보
-파일이 공지사항에 붙은 건지, 게시글에 붙은 건지, 과정에 붙은 건지 연결
+## t_user_roles
+회원별 권한
 
-t_notices
-공지사항
-학원 공지, 개강 안내, 휴무 안내 같은 공식 알림
+- id: integer, NOT NULL, PK - 회원 권한 식별자
+- user_id: integer, NOT NULL, FK -> t_user.id - 권한을 가진 회원
+- role_name: varchar, NULL - user(일반회원), staff(직원), admin(관리자)
+- created_at: timestamp, NULL - 권한 부여 시각
 
-t_posts
-게시글
-후기, 자료글, 일반 게시판 글 같은 콘텐츠
+## t_courses
+학원 교육 과정 기본정보
 
-t_inquiries
-문의
-상담 신청, 질문, 답변, 처리 상태 저장
+- id: integer, NOT NULL, PK - 과정 식별자
+- course_name: varchar, NOT NULL - 과정명
+- summary: varchar, NULL - 과정 요약
+- description: text, NULL - 과정 상세 설명
+- thumbnail_file_id: integer, NULL, FK -> t_files.id - 대표 이미지
+- is_visible: boolean, NULL, 기본값 true - 사용자 페이지 노출 여부
+- status: varchar, NULL, 기본값 운영중 - 모집중, 운영중, 마감, deleted(삭제)
+- sort_order: integer, NULL, 기본값 0 - 노출 순서, 작은 값 우선
+- created_by: integer, NULL, FK -> t_user.id - 등록한 직원·관리자
+- updated_by: integer, NULL, FK -> t_user.id - 마지막 수정 직원·관리자
+- created_at: timestamp, NULL - 생성 시각
+- updated_at: timestamp, NULL - 수정 시각
 
+## t_course_sessions
+교육 과정별 모집·운영 회차
 
-------------------------
+- id: integer, NOT NULL, PK - 회차 식별자
+- course_id: integer, NOT NULL, FK -> t_courses.id - 소속 과정
+- session_name: varchar, NULL - 회차명 또는 기수명
+- session_no: integer, NULL - 회차 번호
+- start_date: date, NULL - 교육 시작일
+- end_date: date, NULL - 교육 종료일
+- capacity: integer, NULL, 기본값 20 - 모집 정원
+- status: varchar, NULL, 기본값 모집중 - 모집중, 운영중, 마감, deleted(삭제)
+- created_at: timestamp, NULL - 생성 시각
+- updated_at: timestamp, NULL - 수정 시각
+- class_start_time: time, NULL - 일일 수업 시작 시각
+- class_end_time: time, NULL - 일일 수업 종료 시각
 
-(이건 구현 안함. 그냥 노트용)
-요즘 서브메뉴 등록 방식은 잘 안한다함.
-백앤드 일만 커짐
+## t_enrollments
+회원의 과정 회차 신청
 
-만약 진짜 한다면
+- id: integer, NOT NULL, PK - 신청 식별자
+- user_id: integer, NOT NULL, FK -> t_user.id - 신청 회원
+- course_id: integer, NOT NULL, FK -> t_courses.id - 신청 과정
+- session_id: integer, NOT NULL, FK -> t_course_sessions.id - 신청 회차
+- memo: text, NULL - 직원·관리자 처리 메모
+- applied_at: timestamp, NOT NULL - 신청 시각
+- created_at: timestamp, NOT NULL - 생성 시각
+- updated_at: timestamp, NOT NULL - 수정 시각
+- status: varchar, NOT NULL, 기본값 pending - pending(승인대기), approved(승인), rejected(반려)
 
-과정안내
-- 웹디자인
-- 영상편집
-- 컴퓨터활용능력
-- 전산회계
-- 자바 개발자
+제약:
+- 동일 회원은 동일 회차에 한 번만 신청 가능: UNIQUE(user_id, session_id)
+- status는 pending, approved, rejected만 허용
 
-이정도만 추천
+## t_notices
+학원 공지사항
 
+- id: integer, NOT NULL, PK - 공지 식별자
+- title: varchar, NOT NULL - 공지 제목
+- content: text, NULL - 공지 내용
+- author_id: integer, NULL, FK -> t_user.id - 작성 회원
+- author_name: varchar, NULL - 작성 당시 표시용 작성자명
+- view_count: integer, NULL, 기본값 0 - 조회 수
+- is_visible: boolean, NULL, 기본값 true - 사용자 페이지 노출 여부
+- is_pinned: boolean, NULL, 기본값 false - 목록 상단 고정 여부
+- status: varchar, NULL, 기본값 published - published(게시), deleted(삭제)
+- published_at: timestamp, NULL - 게시 시각
+- created_at: timestamp, NOT NULL - 생성 시각
+- updated_at: timestamp, NOT NULL - 수정 시각
 
+## t_inquiries
+로그인 회원이 작성한 문의 원문
 
+- id: integer, NOT NULL, PK - 문의 식별자
+- user_id: integer, NOT NULL, FK -> t_user.id - 작성 회원
+- title: varchar, NULL - 문의 제목
+- content: text, NULL - 문의 내용
+- created_at: timestamp, NULL - 작성 시각
+- updated_at: timestamp, NULL - 마지막 수정 또는 답글 작성 시각
 
+연락처는 저장하지 않으며 user_id로 t_user에서 조회한다.
 
+## t_inquiry_replies
+문의에 작성된 사용자·직원 답글
 
+- id: integer, NOT NULL, PK - 답글 식별자
+- inquiry_id: integer, NOT NULL, FK -> t_inquiries.id - 원문 문의
+- user_id: integer, NULL, FK -> t_user.id - 답글 작성 회원
+- content: text, NOT NULL - 답글 내용
+- created_at: timestamp, NOT NULL - 작성 시각
+- updated_at: timestamp, NOT NULL - 수정 시각
 
+작성자 역할은 user_id로 t_user_roles에서 조회한다.
+문의 삭제 시 연결된 답글도 함께 삭제된다.
 
+## t_files
+업로드 파일 메타데이터
 
+- id: integer, NOT NULL, PK - 파일 식별자
+- original_name: varchar, NULL - 업로드 당시 원본 파일명
+- stored_name: varchar, NULL - 저장소에 저장된 파일명
+- file_path: varchar, NULL - 로컬 저장 파일 경로
+- mime_type: varchar, NULL - MIME 유형
+- file_size: bigint, NULL - 파일 크기(byte)
+- created_at: timestamp, NULL - 업로드 시각
+- storage_type: varchar, NULL, 기본값 local - local(서버), cloudinary(Cloudinary)
+- bucket: varchar, NULL - 외부 저장소 버킷 또는 Cloudinary 클라우드명
+- storage_key: varchar, NULL - 저장소 내부 파일 키
+- public_url: varchar, NULL - 외부 공개 URL
+- updated_at: timestamp, NOT NULL - 수정 시각
+- uploaded_by: integer, NULL, FK -> t_user.id - 업로드 회원
+- status: varchar, NOT NULL, 기본값 active - active(사용), deleted(삭제)
 
+## t_file_links
+파일과 과정·공지·배너 등 업무 데이터의 연결
 
-------------------------
+- id: integer, NOT NULL, PK - 파일 연결 식별자
+- file_id: integer, NOT NULL, FK -> t_files.id - 연결 파일
+- target_table: varchar, NOT NULL - 대상 테이블명(t_courses, t_notices 등)
+- target_id: integer, NOT NULL - 대상 데이터 식별자
+- file_role: varchar, NULL, 기본값 attachment - attachment, description_image 등
+- sort_order: integer, NULL, 기본값 0 - 표시 순서
+- created_at: timestamp, NULL - 생성 시각
+- updated_at: timestamp, NULL - 수정 시각
+
+## t_banner
+홈페이지 노출 배너
+
+- id: integer, NOT NULL, PK - 배너 식별자
+- title: varchar, NULL - 배너 제목
+- subtitle: varchar, NULL - 배너 부제목
+- description: text, NULL - 배너 설명
+- image_file_id: integer, NULL, FK -> t_files.id - 배너 이미지
+- link_url: varchar, NULL - 클릭 이동 URL
+- link_target: varchar, NULL, 기본값 _self - _self(현재 창), _blank(새 창)
+- position: varchar, NULL, 기본값 main - 배너 노출 위치
+- is_visible: boolean, NULL, 기본값 true - 노출 여부
+- status: varchar, NULL, 기본값 active - active(사용), deleted(삭제)
+- sort_order: integer, NULL, 기본값 0 - 노출 순서
+- start_at: timestamp, NULL - 노출 시작 시각
+- end_at: timestamp, NULL - 노출 종료 시각
+- created_by: integer, NULL, FK -> t_user.id - 등록한 직원·관리자
+- updated_by: integer, NULL, FK -> t_user.id - 마지막 수정 직원·관리자
+- created_at: timestamp, NULL - 생성 시각
+- updated_at: timestamp, NULL - 수정 시각
+
+## t_test1
+개발용 테스트 부모 테이블
+
+- id: integer, NOT NULL, PK - 테스트 데이터 식별자
+- title: varchar, NULL - 테스트 제목
+- content: varchar, NULL - 테스트 내용
+- created_dt: timestamptz, NULL - 생성 시각
+
+## t_test1_child
+개발용 테스트 자식 테이블
+
+- id: integer, NOT NULL, PK - 테스트 자식 식별자
+- comment: varchar, NULL - 테스트 댓글
+- created_dt: timestamptz, NULL - 생성 시각
+- test1_id: integer, NULL, FK -> t_test1.id - 부모 테스트 데이터
+
+============================================================
+
+현재 존재하지 않는 이전 테이블/컬럼:
+
+- t_apply: 삭제됨
+- t_posts: 삭제됨
+- t_inquiries.name, phone, email, answer, answered_by, answered_at, status: 삭제됨
+- t_inquiry_replies.author_role, status: 삭제됨
+- t_enrollments.applicant_name, applicant_phone, applicant_email, apply_status, approval_status: 삭제됨
+
+DB 주석 마이그레이션:
+- drizzle/0016_database_comments.sql
+
+실제 DB 구조 확인 SQL:
+
 SELECT
-    c.table_schema AS schema_name,
     c.table_name,
+    obj_description(cls.oid, 'pg_class') AS table_comment,
     c.ordinal_position,
     c.column_name,
     c.data_type,
-    c.character_maximum_length AS max_length,
     c.is_nullable,
-    c.column_default
+    c.column_default,
+    col_description(cls.oid, c.ordinal_position) AS column_comment
 FROM information_schema.columns c
+JOIN pg_class cls ON cls.relname = c.table_name
+JOIN pg_namespace n
+  ON n.oid = cls.relnamespace
+ AND n.nspname = c.table_schema
 WHERE c.table_schema = 'public'
+  AND cls.relkind = 'r'
 ORDER BY c.table_name, c.ordinal_position;
-
-"schema_name"	"table_name"	"ordinal_position"	"column_name"	"data_type"	"max_length"	"is_nullable"	"column_default"
-"public"	"t_apply"	"1"	"id"	"integer"		"NO"	"nextval('t_apply_id_seq'::regclass)"
-"public"	"t_apply"	"2"	"enrollment_id"	"integer"		"YES"	
-"public"	"t_apply"	"3"	"user_id"	"integer"		"YES"	
-"public"	"t_apply"	"4"	"session_id"	"integer"		"YES"	
-"public"	"t_apply"	"5"	"applicant_name"	"character varying"		"NO"	"''::character varying"
-"public"	"t_apply"	"6"	"phone"	"character varying"		"NO"	"''::character varying"
-"public"	"t_apply"	"7"	"email"	"character varying"		"NO"	"''::character varying"
-"public"	"t_apply"	"8"	"birth_date"	"date"		"YES"	
-"public"	"t_apply"	"9"	"gender"	"character varying"		"NO"	"''::character varying"
-"public"	"t_apply"	"10"	"address"	"character varying"		"NO"	"''::character varying"
-"public"	"t_apply"	"11"	"detail_address"	"character varying"		"NO"	"''::character varying"
-"public"	"t_apply"	"12"	"current_job"	"character varying"		"NO"	"''::character varying"
-"public"	"t_apply"	"13"	"education_level"	"character varying"		"NO"	"''::character varying"
-"public"	"t_apply"	"14"	"application_content"	"text"		"NO"	"''::text"
-"public"	"t_apply"	"15"	"privacy_agreed"	"boolean"		"NO"	"false"
-"public"	"t_apply"	"16"	"status"	"character varying"		"NO"	"'submitted'::character varying"
-"public"	"t_apply"	"17"	"created_at"	"timestamp without time zone"		"NO"	"now()"
-"public"	"t_apply"	"18"	"updated_at"	"timestamp without time zone"		"NO"	"now()"
-"public"	"t_banner"	"1"	"id"	"integer"		"NO"	"nextval('t_banner_id_seq'::regclass)"
-"public"	"t_banner"	"2"	"title"	"character varying"		"YES"	"''::character varying"
-"public"	"t_banner"	"3"	"subtitle"	"character varying"		"YES"	"''::character varying"
-"public"	"t_banner"	"4"	"description"	"text"		"YES"	"''::text"
-"public"	"t_banner"	"5"	"image_file_id"	"integer"		"YES"	
-"public"	"t_banner"	"6"	"link_url"	"character varying"		"YES"	"''::character varying"
-"public"	"t_banner"	"7"	"link_target"	"character varying"		"YES"	"'_self'::character varying"
-"public"	"t_banner"	"8"	"position"	"character varying"		"YES"	"'main'::character varying"
-"public"	"t_banner"	"9"	"is_visible"	"boolean"		"YES"	"true"
-"public"	"t_banner"	"10"	"status"	"character varying"		"YES"	"'active'::character varying"
-"public"	"t_banner"	"11"	"sort_order"	"integer"		"YES"	"0"
-"public"	"t_banner"	"12"	"start_at"	"timestamp without time zone"		"YES"	
-"public"	"t_banner"	"13"	"end_at"	"timestamp without time zone"		"YES"	
-"public"	"t_banner"	"14"	"created_by"	"integer"		"YES"	
-"public"	"t_banner"	"15"	"updated_by"	"integer"		"YES"	
-"public"	"t_banner"	"16"	"created_at"	"timestamp without time zone"		"YES"	"now()"
-"public"	"t_banner"	"17"	"updated_at"	"timestamp without time zone"		"YES"	"now()"
-"public"	"t_course_sessions"	"1"	"id"	"integer"		"NO"	"nextval('t_course_sessions_id_seq'::regclass)"
-"public"	"t_course_sessions"	"2"	"course_id"	"integer"		"NO"	
-"public"	"t_course_sessions"	"3"	"session_name"	"character varying"		"YES"	
-"public"	"t_course_sessions"	"4"	"session_no"	"integer"		"YES"	
-"public"	"t_course_sessions"	"5"	"start_date"	"date"		"YES"	
-"public"	"t_course_sessions"	"6"	"end_date"	"date"		"YES"	
-"public"	"t_course_sessions"	"9"	"capacity"	"integer"		"YES"	"20"
-"public"	"t_course_sessions"	"11"	"status"	"character varying"		"YES"	"'recruiting'::character varying"
-"public"	"t_course_sessions"	"12"	"created_at"	"timestamp without time zone"		"YES"	"now()"
-"public"	"t_course_sessions"	"13"	"updated_at"	"timestamp without time zone"		"YES"	"now()"
-"public"	"t_course_sessions"	"15"	"class_start_time"	"time without time zone"		"YES"	
-"public"	"t_course_sessions"	"16"	"class_end_time"	"time without time zone"		"YES"	
-"public"	"t_courses"	"1"	"id"	"integer"		"NO"	"nextval('t_courses_id_seq'::regclass)"
-"public"	"t_courses"	"2"	"course_name"	"character varying"		"NO"	
-"public"	"t_courses"	"3"	"summary"	"character varying"		"YES"	"''::character varying"
-"public"	"t_courses"	"4"	"description"	"text"		"YES"	"''::text"
-"public"	"t_courses"	"5"	"thumbnail_file_id"	"integer"		"YES"	
-"public"	"t_courses"	"6"	"is_visible"	"boolean"		"YES"	"true"
-"public"	"t_courses"	"7"	"status"	"character varying"		"YES"	"'active'::character varying"
-"public"	"t_courses"	"8"	"sort_order"	"integer"		"YES"	"0"
-"public"	"t_courses"	"9"	"created_by"	"integer"		"YES"	
-"public"	"t_courses"	"10"	"updated_by"	"integer"		"YES"	
-"public"	"t_courses"	"11"	"created_at"	"timestamp without time zone"		"YES"	"now()"
-"public"	"t_courses"	"12"	"updated_at"	"timestamp without time zone"		"YES"	"now()"
-"public"	"t_courses"	"13"	"bdel"	"boolean"		"YES"	"false"
-"public"	"t_enrollments"	"1"	"id"	"integer"		"NO"	"nextval('t_enrollments_id_seq'::regclass)"
-"public"	"t_enrollments"	"2"	"user_id"	"integer"		"YES"	
-"public"	"t_enrollments"	"3"	"course_id"	"integer"		"NO"	
-"public"	"t_enrollments"	"4"	"session_id"	"integer"		"NO"	
-"public"	"t_enrollments"	"5"	"applicant_name"	"character varying"		"NO"	"''::character varying"
-"public"	"t_enrollments"	"6"	"applicant_phone"	"character varying"		"NO"	"''::character varying"
-"public"	"t_enrollments"	"7"	"applicant_email"	"character varying"		"NO"	"''::character varying"
-"public"	"t_enrollments"	"8"	"apply_status"	"character varying"		"NO"	"'submitted'::character varying"
-"public"	"t_enrollments"	"9"	"approval_status"	"character varying"		"NO"	"'pending'::character varying"
-"public"	"t_enrollments"	"10"	"memo"	"text"		"NO"	"''::text"
-"public"	"t_enrollments"	"11"	"applied_at"	"timestamp without time zone"		"NO"	"now()"
-"public"	"t_enrollments"	"12"	"created_at"	"timestamp without time zone"		"NO"	"now()"
-"public"	"t_enrollments"	"13"	"updated_at"	"timestamp without time zone"		"NO"	"now()"
-"public"	"t_file_links"	"1"	"id"	"integer"		"NO"	"nextval('t_file_links_id_seq'::regclass)"
-"public"	"t_file_links"	"2"	"file_id"	"integer"		"NO"	
-"public"	"t_file_links"	"3"	"target_table"	"character varying"		"NO"	
-"public"	"t_file_links"	"4"	"target_id"	"integer"		"NO"	
-"public"	"t_file_links"	"5"	"file_role"	"character varying"		"YES"	"'attachment'::character varying"
-"public"	"t_file_links"	"6"	"sort_order"	"integer"		"YES"	"0"
-"public"	"t_file_links"	"7"	"created_at"	"timestamp without time zone"		"YES"	"now()"
-"public"	"t_file_links"	"8"	"updated_at"	"timestamp without time zone"		"YES"	"now()"
-"public"	"t_files"	"1"	"id"	"integer"		"NO"	
-"public"	"t_files"	"2"	"original_name"	"character varying"		"YES"	"''::character varying"
-"public"	"t_files"	"3"	"stored_name"	"character varying"		"YES"	"''::character varying"
-"public"	"t_files"	"4"	"file_path"	"character varying"		"YES"	"''::character varying"
-"public"	"t_files"	"5"	"mime_type"	"character varying"		"YES"	"''::character varying"
-"public"	"t_files"	"6"	"file_size"	"bigint"		"YES"	"0"
-"public"	"t_files"	"7"	"created_at"	"timestamp without time zone"		"YES"	"now()"
-"public"	"t_files"	"8"	"storage_type"	"character varying"		"YES"	"'local'::character varying"
-"public"	"t_files"	"9"	"bucket"	"character varying"		"YES"	"''::character varying"
-"public"	"t_files"	"10"	"storage_key"	"character varying"		"YES"	"''::character varying"
-"public"	"t_files"	"11"	"public_url"	"character varying"		"YES"	"''::character varying"
-"public"	"t_files"	"12"	"updated_at"	"timestamp without time zone"		"NO"	"now()"
-"public"	"t_files"	"13"	"uploaded_by"	"integer"		"YES"	
-"public"	"t_files"	"14"	"status"	"character varying"		"NO"	"'active'::character varying"
-"public"	"t_inquiries"	"1"	"id"	"integer"		"NO"	"nextval('t_inquiries_id_seq'::regclass)"
-"public"	"t_inquiries"	"2"	"user_id"	"integer"		"YES"	
-"public"	"t_inquiries"	"3"	"name"	"character varying"		"YES"	"''::character varying"
-"public"	"t_inquiries"	"4"	"phone"	"character varying"		"YES"	"''::character varying"
-"public"	"t_inquiries"	"5"	"email"	"character varying"		"YES"	"''::character varying"
-"public"	"t_inquiries"	"6"	"title"	"character varying"		"YES"	
-"public"	"t_inquiries"	"7"	"content"	"text"		"YES"	"''::text"
-"public"	"t_inquiries"	"8"	"answer"	"text"		"YES"	"''::text"
-"public"	"t_inquiries"	"9"	"answered_by"	"integer"		"YES"	
-"public"	"t_inquiries"	"10"	"answered_at"	"timestamp without time zone"		"YES"	
-"public"	"t_inquiries"	"11"	"status"	"character varying"		"YES"	"'waiting'::character varying"
-"public"	"t_inquiries"	"12"	"created_at"	"timestamp without time zone"		"YES"	"now()"
-"public"	"t_inquiries"	"13"	"updated_at"	"timestamp without time zone"		"YES"	"now()"
-"public"	"t_inquiry_replies"	"1"	"id"	"integer"		"NO"	"nextval('t_inquiry_replies_id_seq'::regclass)"
-"public"	"t_inquiry_replies"	"2"	"inquiry_id"	"integer"		"NO"	
-"public"	"t_inquiry_replies"	"3"	"user_id"	"integer"		"YES"	
-"public"	"t_inquiry_replies"	"4"	"author_role"	"character varying"		"NO"	"'user'::character varying"
-"public"	"t_inquiry_replies"	"5"	"content"	"text"		"NO"	"''::text"
-"public"	"t_inquiry_replies"	"6"	"status"	"character varying"		"NO"	"'active'::character varying"
-"public"	"t_inquiry_replies"	"7"	"created_at"	"timestamp without time zone"		"NO"	"now()"
-"public"	"t_inquiry_replies"	"8"	"updated_at"	"timestamp without time zone"		"NO"	"now()"
-"public"	"t_notices"	"1"	"id"	"integer"		"NO"	"nextval('t_notices_id_seq'::regclass)"
-"public"	"t_notices"	"2"	"title"	"character varying"		"NO"	
-"public"	"t_notices"	"3"	"content"	"text"		"YES"	"''::text"
-"public"	"t_notices"	"4"	"author_id"	"integer"		"YES"	
-"public"	"t_notices"	"5"	"author_name"	"character varying"		"YES"	"''::character varying"
-"public"	"t_notices"	"6"	"view_count"	"integer"		"YES"	"0"
-"public"	"t_notices"	"7"	"is_visible"	"boolean"		"YES"	"true"
-"public"	"t_notices"	"8"	"is_pinned"	"boolean"		"YES"	"false"
-"public"	"t_notices"	"9"	"status"	"character varying"		"YES"	"'published'::character varying"
-"public"	"t_notices"	"10"	"published_at"	"timestamp without time zone"		"YES"	
-"public"	"t_notices"	"11"	"created_at"	"timestamp without time zone"		"NO"	"now()"
-"public"	"t_notices"	"12"	"updated_at"	"timestamp without time zone"		"NO"	"now()"
-"public"	"t_posts"	"1"	"id"	"integer"		"NO"	"nextval('t_posts_id_seq'::regclass)"
-"public"	"t_posts"	"2"	"category"	"character varying"		"NO"	"'general'::character varying"
-"public"	"t_posts"	"3"	"title"	"character varying"		"NO"	
-"public"	"t_posts"	"4"	"content"	"text"		"NO"	"''::text"
-"public"	"t_posts"	"5"	"author_id"	"integer"		"YES"	
-"public"	"t_posts"	"6"	"author_name"	"character varying"		"NO"	"''::character varying"
-"public"	"t_posts"	"7"	"view_count"	"integer"		"NO"	"0"
-"public"	"t_posts"	"8"	"is_visible"	"boolean"		"NO"	"true"
-"public"	"t_posts"	"9"	"status"	"character varying"		"NO"	"'published'::character varying"
-"public"	"t_posts"	"10"	"created_at"	"timestamp without time zone"		"NO"	"now()"
-"public"	"t_posts"	"11"	"updated_at"	"timestamp without time zone"		"NO"	"now()"
-"public"	"t_test1"	"1"	"id"	"integer"		"NO"	
-"public"	"t_test1"	"2"	"title"	"character varying"		"YES"	"''::character varying"
-"public"	"t_test1"	"3"	"content"	"character varying"		"YES"	"''::character varying"
-"public"	"t_test1"	"4"	"created_dt"	"timestamp with time zone"		"YES"	"now()"
-"public"	"t_test1_child"	"1"	"id"	"integer"		"NO"	
-"public"	"t_test1_child"	"2"	"comment"	"character varying"		"YES"	"''::character varying"
-"public"	"t_test1_child"	"3"	"created_dt"	"timestamp with time zone"		"YES"	"now()"
-"public"	"t_test1_child"	"4"	"test1_id"	"integer"		"YES"	
-"public"	"t_user"	"1"	"id"	"integer"		"NO"	"nextval('t_user_id_seq'::regclass)"
-"public"	"t_user"	"2"	"provider"	"character varying"		"YES"	"'google'::character varying"
-"public"	"t_user"	"3"	"provider_user_id"	"character varying"		"YES"	
-"public"	"t_user"	"4"	"email"	"character varying"		"YES"	
-"public"	"t_user"	"6"	"profile_image_url"	"character varying"		"YES"	"''::character varying"
-"public"	"t_user"	"7"	"role"	"character varying"		"YES"	"'user'::character varying"
-"public"	"t_user"	"8"	"status"	"character varying"		"YES"	"'active'::character varying"
-"public"	"t_user"	"9"	"last_login_at"	"timestamp without time zone"		"YES"	
-"public"	"t_user"	"10"	"created_at"	"timestamp without time zone"		"YES"	"now()"
-"public"	"t_user"	"11"	"updated_at"	"timestamp without time zone"		"YES"	"now()"
-"public"	"t_user"	"12"	"username"	"character varying"	"255"	"YES"	
-"public"	"t_user"	"13"	"password"	"character varying"		"YES"	
-"public"	"t_user"	"14"	"real_name"	"character varying"	"255"	"YES"	
-"public"	"t_user"	"15"	"phone"	"character varying"		"YES"	
-"public"	"t_user"	"16"	"bdel"	"boolean"		"YES"	"false"
-"public"	"t_user_roles"	"1"	"id"	"integer"		"NO"	"nextval('t_user_roles_id_seq'::regclass)"
-"public"	"t_user_roles"	"2"	"user_id"	"integer"		"NO"	
-"public"	"t_user_roles"	"3"	"role_name"	"character varying"	"250"	"YES"	
-"public"	"t_user_roles"	"4"	"created_at"	"timestamp without time zone"		"YES"	"CURRENT_TIMESTAMP"
-"public"	"t_user_signup_log"	"1"	"id"	"integer"		"NO"	"nextval('t_user_signup_log_id_seq'::regclass)"
-"public"	"t_user_signup_log"	"2"	"user_id"	"integer"		"YES"	
-"public"	"t_user_signup_log"	"3"	"ip_address"	"character varying"		"YES"	
-"public"	"t_user_signup_log"	"4"	"user_agent"	"character varying"		"YES"	
-"public"	"t_user_signup_log"	"5"	"fingerprint_hash"	"text"		"YES"	
-"public"	"t_user_signup_log"	"6"	"created_at"	"timestamp with time zone"		"YES"	"now()"
