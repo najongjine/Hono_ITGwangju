@@ -1,4 +1,4 @@
-import { pgTable, index, foreignKey, serial, integer, varchar, date, timestamp, time, text, boolean, unique, bigint } from "drizzle-orm/pg-core"
+import { pgTable, index, foreignKey, serial, integer, varchar, date, timestamp, time, text, boolean, unique, bigint, check } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 
 
@@ -91,15 +91,27 @@ export const tUserRegistermeta = pgTable("t_user_registermeta", {
 	id: serial().primaryKey().notNull(),
 	signupIp: varchar("signup_ip", { length: 45 }),
 	signupUserAgent: text("signup_user_agent"),
+	cloudflareTrustile: varchar("cloudflare_trustile", { length: 20 }).default('notchecked').notNull(),
 	createdDt: timestamp("created_dt", { withTimezone: true, mode: 'string' }).defaultNow(),
 	userId: integer("user_id"),
 }, (table) => [
 	index("idx_t_user_registermeta_user_id").on(table.userId),
+	check("t_user_registermeta_cloudflare_trustile_check", sql`${table.cloudflareTrustile} in ('checked', 'notchecked', 'justallowed')`),
 	foreignKey({
 		columns: [table.userId],
 		foreignColumns: [tUser.id],
 		name: "t_user_registermeta_user_id_fkey"
 	}).onUpdate("cascade").onDelete("cascade"),
+]);
+
+/** 전역 서비스 설정. id=1인 단일 행만 사용한다. */
+export const tSettings = pgTable("t_settings", {
+	id: integer().default(1).primaryKey().notNull(),
+	cloudflareTrustile: boolean("cloudflare_trustile").default(true).notNull(),
+	createdDt: timestamp("created_dt", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	updatedDt: timestamp("updated_dt", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	check("t_settings_singleton_check", sql`${table.id} = 1`),
 ]);
 
 /** 회원의 과정 회차 신청. status: pending | approved | rejected */

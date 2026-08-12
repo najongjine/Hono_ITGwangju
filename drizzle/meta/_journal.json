@@ -162,6 +162,13 @@
       "when": 1787136000000,
       "tag": "0022_all_foreign_keys_cascade",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1787222400000,
+      "tag": "0023_cloudflare_trustile_settings",
+      "breakpoints": true
     }
   ]
 }

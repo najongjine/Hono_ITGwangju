@@ -6,6 +6,7 @@ import {
   tCourseSessions,
   tCourses,
   tEnrollments,
+  tSettings,
   tUser,
   tUserRegistermeta,
   tUserRoles,
@@ -89,6 +90,19 @@ const getSignupIp = (c: Context) => {
 
 const getSignupUserAgent = (c: Context) =>
   c.req.header("user-agent")?.trim() || null;
+
+type CloudflareTrustileStatus = "checked" | "notchecked" | "justallowed";
+
+const isCloudflareTrustileRequired = async () => {
+  const settings = await db
+    .select({ cloudflareTrustile: tSettings.cloudflareTrustile })
+    .from(tSettings)
+    .where(eq(tSettings.id, 1))
+    .limit(1);
+
+  // 설정 행이 유실된 경우에는 보안상 Turnstile 검증을 강제한다.
+  return settings[0]?.cloudflareTrustile ?? true;
+};
 
 const fail = (c: Context, error: unknown) => ({
   success: false,
@@ -258,11 +272,34 @@ router.post("/register", async (c) => {
       return c.json(fail(c, new Error("phone is required")));
     }
 
-    await verifyTurnstile({
-      token: turnstileToken,
-      remoteIp: signupIp,
-      expectedAction: "signup",
-    });
+    const cloudflareTrustileRequired = await isCloudflareTrustileRequired();
+    let cloudflareTrustileStatus: CloudflareTrustileStatus = "notchecked";
+
+    if (cloudflareTrustileRequired) {
+      await verifyTurnstile({
+        token: turnstileToken,
+        remoteIp: signupIp,
+        expectedAction: "signup",
+      });
+      cloudflareTrustileStatus = "checked";
+    } else if (turnstileToken) {
+      try {
+        await verifyTurnstile({
+          token: turnstileToken,
+          remoteIp: signupIp,
+          expectedAction: "signup",
+        });
+        cloudflareTrustileStatus = "checked";
+      } catch (error) {
+        cloudflareTrustileStatus = "justallowed";
+        console.warn(
+          "Turnstile validation was bypassed because cloudflare_trustile is disabled",
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    } else {
+      cloudflareTrustileStatus = "justallowed";
+    }
 
     const loginId = username || email;
     const existing = await db
@@ -305,6 +342,7 @@ router.post("/register", async (c) => {
         userId: user.id,
         signupIp,
         signupUserAgent,
+        cloudflareTrustile: cloudflareTrustileStatus,
       });
 
       return user;

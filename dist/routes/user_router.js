@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { getConnInfo } from "@hono/node-server/conninfo";
 import { and, desc, eq, ilike, ne, or, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { tCourseSessions, tCourses, tEnrollments, tUser, tUserRegistermeta, tUserRoles, } from "../db/schema.js";
+import { tCourseSessions, tCourses, tEnrollments, tSettings, tUser, tUserRegistermeta, tUserRoles, } from "../db/schema.js";
 import { createUserToken, createTemporaryPassword, encryptPersonalData, hashPassword, isAdminUser, isStaffOrAdminUser, sendPasswordResetEmail, toSafeUser, verifyPassword, verifyUserToken, withUserRoles, } from "../utils/auth_utils.js";
 import { verifyTurnstile } from "../utils/turnstile.js";
 const router = new Hono();
@@ -60,6 +60,15 @@ const getSignupIp = (c) => {
     }
 };
 const getSignupUserAgent = (c) => c.req.header("user-agent")?.trim() || null;
+const isCloudflareTrustileRequired = async () => {
+    const settings = await db
+        .select({ cloudflareTrustile: tSettings.cloudflareTrustile })
+        .from(tSettings)
+        .where(eq(tSettings.id, 1))
+        .limit(1);
+    // 설정 행이 유실된 경우에는 보안상 Turnstile 검증을 강제한다.
+    return settings[0]?.cloudflareTrustile ?? true;
+};
 const fail = (c, error) => ({
     success: false,
     data: null,
@@ -205,11 +214,33 @@ router.post("/register", async (c) => {
         if (!phone) {
             return c.json(fail(c, new Error("phone is required")));
         }
-        await verifyTurnstile({
-            token: turnstileToken,
-            remoteIp: signupIp,
-            expectedAction: "signup",
-        });
+        const cloudflareTrustileRequired = await isCloudflareTrustileRequired();
+        let cloudflareTrustileStatus = "notchecked";
+        if (cloudflareTrustileRequired) {
+            await verifyTurnstile({
+                token: turnstileToken,
+                remoteIp: signupIp,
+                expectedAction: "signup",
+            });
+            cloudflareTrustileStatus = "checked";
+        }
+        else if (turnstileToken) {
+            try {
+                await verifyTurnstile({
+                    token: turnstileToken,
+                    remoteIp: signupIp,
+                    expectedAction: "signup",
+                });
+                cloudflareTrustileStatus = "checked";
+            }
+            catch (error) {
+                cloudflareTrustileStatus = "justallowed";
+                console.warn("Turnstile validation was bypassed because cloudflare_trustile is disabled", error instanceof Error ? error.message : String(error));
+            }
+        }
+        else {
+            cloudflareTrustileStatus = "justallowed";
+        }
         const loginId = username || email;
         const existing = await db
             .select({ id: tUser.id })
@@ -248,6 +279,7 @@ router.post("/register", async (c) => {
                 userId: user.id,
                 signupIp,
                 signupUserAgent,
+                cloudflareTrustile: cloudflareTrustileStatus,
             });
             return user;
         });
