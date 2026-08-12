@@ -4,6 +4,7 @@ import { and, desc, eq, ilike, ne, or, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { tCourseSessions, tCourses, tEnrollments, tUser, tUserRegistermeta, tUserRoles, } from "../db/schema.js";
 import { createUserToken, createTemporaryPassword, encryptPersonalData, hashPassword, isAdminUser, isStaffOrAdminUser, sendPasswordResetEmail, toSafeUser, verifyPassword, verifyUserToken, withUserRoles, } from "../utils/auth_utils.js";
+import { verifyTurnstile } from "../utils/turnstile.js";
 const router = new Hono();
 const MODULE_NAME = "user_router";
 const ok = (data = null, message = "") => ({
@@ -185,6 +186,11 @@ router.post("/register", async (c) => {
         const zipcode = readOptionalString(input, ["zipcode", "zipCode", "zip_code"]);
         const roadAddress = readOptionalString(input, ["roadAddress", "road_address"]);
         const detailAddress = readOptionalString(input, ["detailAddress", "detail_address"]);
+        const turnstileToken = readString(input, [
+            "turnstileToken",
+            "turnstile_token",
+            "cf-turnstile-response",
+        ]);
         const signupIp = getSignupIp(c);
         const signupUserAgent = getSignupUserAgent(c);
         if (!email) {
@@ -199,6 +205,11 @@ router.post("/register", async (c) => {
         if (!phone) {
             return c.json(fail(c, new Error("phone is required")));
         }
+        await verifyTurnstile({
+            token: turnstileToken,
+            remoteIp: signupIp,
+            expectedAction: "signup",
+        });
         const loginId = username || email;
         const existing = await db
             .select({ id: tUser.id })
@@ -672,6 +683,41 @@ router.patch("/me", async (c) => {
             throw new Error("user not found");
         }
         return c.json(ok(toSafeUser(await withUserRoles(updatedUser)), "profile updated"));
+    }
+    catch (error) {
+        return c.json(fail(c, error));
+    }
+});
+router.patch("/me/password", async (c) => {
+    try {
+        const user = await verifyUserToken(c.req.header("authorization") ?? "");
+        const input = await readJson(c);
+        const currentPassword = readString(input, ["currentPassword", "current_password"]);
+        const newPassword = readString(input, ["newPassword", "new_password"]);
+        if (!currentPassword || !newPassword) {
+            throw new Error("현재 비밀번호와 새 비밀번호를 입력해 주세요.");
+        }
+        if (newPassword.length < 8) {
+            throw new Error("새 비밀번호는 8자 이상 입력해 주세요.");
+        }
+        if (!(await verifyPassword(currentPassword, user.password ?? null))) {
+            throw new Error("현재 비밀번호가 일치하지 않습니다.");
+        }
+        if (await verifyPassword(newPassword, user.password ?? null)) {
+            throw new Error("새 비밀번호는 현재 비밀번호와 다르게 입력해 주세요.");
+        }
+        const rows = await db
+            .update(tUser)
+            .set({
+            password: await hashPassword(newPassword),
+            updatedAt: new Date().toISOString(),
+        })
+            .where(eq(tUser.id, user.id))
+            .returning({ id: tUser.id });
+        if (!rows[0]) {
+            throw new Error("사용자 정보를 찾을 수 없습니다.");
+        }
+        return c.json(ok(null, "비밀번호가 변경되었습니다."));
     }
     catch (error) {
         return c.json(fail(c, error));

@@ -27,6 +27,33 @@ const rawOpenApiSpec = {
     },
   ],
   paths: {
+    "/api/user/me/password": {
+      patch: {
+        tags: ["Users"],
+        summary: "Change the signed-in user's password",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["currentPassword", "newPassword"],
+                properties: {
+                  currentPassword: { type: "string", format: "password" },
+                  newPassword: { type: "string", format: "password", minLength: 8 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "Password changed or validation error response",
+          },
+        },
+      },
+    },
     "/api/user/admin/password-reset": {
       post: {
         tags: ["Users"],
