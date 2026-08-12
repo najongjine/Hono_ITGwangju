@@ -184,6 +184,14 @@ const requireStaffUser = async (c) => {
     }
     throw new Error("staff or admin permission is required");
 };
+router.get("/register/settings", async (c) => {
+    try {
+        return c.json(ok({ cloudflareTrustile: await isCloudflareTrustileRequired() }));
+    }
+    catch (error) {
+        return c.json(fail(c, error));
+    }
+});
 router.post("/register", async (c) => {
     try {
         const input = await readJson(c);
