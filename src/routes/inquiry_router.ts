@@ -1,5 +1,5 @@
 import { Hono, type Context } from "hono";
-import { and, asc, desc, eq, ilike, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { tInquiries, tInquiryReplies, tUser } from "../db/schema.js";
 import {
@@ -115,6 +115,23 @@ const getInquiryReplies = async (inquiryId: number) => {
   return rows.map(safeInquiryReply);
 };
 
+const getInquiryReplyCounts = async (inquiryIds: number[]) => {
+  if (inquiryIds.length === 0) {
+    return new Map<number, number>();
+  }
+
+  const rows = await db
+    .select({
+      inquiryId: tInquiryReplies.inquiryId,
+      replyCount: count(tInquiryReplies.id),
+    })
+    .from(tInquiryReplies)
+    .where(inArray(tInquiryReplies.inquiryId, inquiryIds))
+    .groupBy(tInquiryReplies.inquiryId);
+
+  return new Map(rows.map((row) => [row.inquiryId, row.replyCount]));
+};
+
 const safeInquiryWithReplies = async (inquiry: typeof tInquiries.$inferSelect) => ({
   ...safeInquiry(inquiry, await getInquiryUser(inquiry.userId)),
   replies: await getInquiryReplies(inquiry.id),
@@ -147,7 +164,12 @@ router.get("/", async (c) => {
       .orderBy(desc(tInquiries.createdAt), desc(tInquiries.id))
       .limit(limit);
 
-    return c.json(ok(rows.map(({ inquiry, user }) => safeInquiry(inquiry, user))));
+    const replyCounts = await getInquiryReplyCounts(rows.map(({ inquiry }) => inquiry.id));
+
+    return c.json(ok(rows.map(({ inquiry, user }) => ({
+      ...safeInquiry(inquiry, user),
+      replyCount: replyCounts.get(inquiry.id) ?? 0,
+    }))));
   } catch (error) {
     return c.json(fail(c, error));
   }

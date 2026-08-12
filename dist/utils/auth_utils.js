@@ -148,6 +148,9 @@ export const toSafeUser = (user) => {
         ...safeUser,
         realName: decryptPersonalData(safeUser.realName),
         phone: decryptPersonalData(safeUser.phone),
+        detailAddress: safeUser.detailAddress === null
+            ? null
+            : decryptPersonalData(safeUser.detailAddress),
     };
 };
 export const hashPassword = async (password) => {

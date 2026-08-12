@@ -70,6 +70,9 @@ export const tUser = pgTable("t_user", {
     password: varchar(),
     realName: varchar("real_name", { length: 255 }),
     phone: varchar(),
+    zipcode: varchar({ length: 20 }),
+    roadAddress: varchar("road_address", { length: 500 }),
+    detailAddress: varchar("detail_address"),
 }, (table) => [
     unique("t_user_provider_user_id_uk").on(table.provider, table.providerUserId),
     unique("t_user_email_uk").on(table.email),

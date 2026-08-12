@@ -208,6 +208,10 @@ export const toSafeUser = (user: UserRow | UserWithRoles) => {
     ...safeUser,
     realName: decryptPersonalData(safeUser.realName),
     phone: decryptPersonalData(safeUser.phone),
+    detailAddress:
+      safeUser.detailAddress === null
+        ? null
+        : decryptPersonalData(safeUser.detailAddress),
   };
 };
 

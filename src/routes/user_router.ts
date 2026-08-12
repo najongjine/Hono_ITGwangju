@@ -178,6 +178,9 @@ router.post("/register", async (c) => {
     const password = readString(input, ["password"]);
     const realName = readString(input, ["realName", "real_name", "name"]);
     const phone = readString(input, ["phone"]);
+    const zipcode = readOptionalString(input, ["zipcode", "zipCode", "zip_code"]);
+    const roadAddress = readOptionalString(input, ["roadAddress", "road_address"]);
+    const detailAddress = readOptionalString(input, ["detailAddress", "detail_address"]);
 
     if (!email) {
       return c.json(fail(c, new Error("email is required")));
@@ -213,6 +216,9 @@ router.post("/register", async (c) => {
           password: await hashPassword(password),
           realName: encryptPersonalData(realName),
           phone: encryptPersonalData(phone),
+          zipcode: zipcode || null,
+          roadAddress: roadAddress || null,
+          detailAddress: detailAddress ? encryptPersonalData(detailAddress) : null,
           status: "active",
         })
         .returning();
@@ -367,6 +373,9 @@ router.post("/admin/users/:id", async (c) => {
     const username = readOptionalString(input, ["username", "loginId", "login_id"])?.toLowerCase();
     const realName = readOptionalString(input, ["realName", "real_name", "name"]);
     const phone = readOptionalString(input, ["phone"]);
+    const zipcode = readOptionalString(input, ["zipcode", "zipCode", "zip_code"]);
+    const roadAddress = readOptionalString(input, ["roadAddress", "road_address"]);
+    const detailAddress = readOptionalString(input, ["detailAddress", "detail_address"]);
     const status = readOptionalString(input, ["status"]);
     const profileImageUrl = readOptionalString(input, ["profileImageUrl", "profile_image_url"]);
 
@@ -388,6 +397,11 @@ router.post("/admin/users/:id", async (c) => {
         ...(username !== undefined ? { username } : {}),
         ...(realName !== undefined ? { realName: encryptPersonalData(realName) } : {}),
         ...(phone !== undefined ? { phone: encryptPersonalData(phone) } : {}),
+        ...(zipcode !== undefined ? { zipcode: zipcode || null } : {}),
+        ...(roadAddress !== undefined ? { roadAddress: roadAddress || null } : {}),
+        ...(detailAddress !== undefined
+          ? { detailAddress: detailAddress ? encryptPersonalData(detailAddress) : null }
+          : {}),
         ...(status !== undefined ? { status: status || "active" } : {}),
         ...(profileImageUrl !== undefined ? { profileImageUrl } : {}),
         updatedAt: new Date().toISOString(),

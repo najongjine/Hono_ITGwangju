@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, asc, desc, eq, ilike, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { tInquiries, tInquiryReplies, tUser } from "../db/schema.js";
 import { isStaffOrAdminUser, toSafeUser, verifyUserToken, } from "../utils/auth_utils.js";
@@ -84,6 +84,20 @@ const getInquiryReplies = async (inquiryId) => {
         .orderBy(asc(tInquiryReplies.createdAt), asc(tInquiryReplies.id));
     return rows.map(safeInquiryReply);
 };
+const getInquiryReplyCounts = async (inquiryIds) => {
+    if (inquiryIds.length === 0) {
+        return new Map();
+    }
+    const rows = await db
+        .select({
+        inquiryId: tInquiryReplies.inquiryId,
+        replyCount: count(tInquiryReplies.id),
+    })
+        .from(tInquiryReplies)
+        .where(inArray(tInquiryReplies.inquiryId, inquiryIds))
+        .groupBy(tInquiryReplies.inquiryId);
+    return new Map(rows.map((row) => [row.inquiryId, row.replyCount]));
+};
 const safeInquiryWithReplies = async (inquiry) => ({
     ...safeInquiry(inquiry, await getInquiryUser(inquiry.userId)),
     replies: await getInquiryReplies(inquiry.id),
@@ -108,7 +122,11 @@ router.get("/", async (c) => {
             .where(where.length > 0 ? and(...where) : undefined)
             .orderBy(desc(tInquiries.createdAt), desc(tInquiries.id))
             .limit(limit);
-        return c.json(ok(rows.map(({ inquiry, user }) => safeInquiry(inquiry, user))));
+        const replyCounts = await getInquiryReplyCounts(rows.map(({ inquiry }) => inquiry.id));
+        return c.json(ok(rows.map(({ inquiry, user }) => ({
+            ...safeInquiry(inquiry, user),
+            replyCount: replyCounts.get(inquiry.id) ?? 0,
+        }))));
     }
     catch (error) {
         return c.json(fail(c, error));

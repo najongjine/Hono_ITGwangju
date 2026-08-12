@@ -26,6 +26,9 @@
 - password: varchar, NULL - 해시 처리된 비밀번호
 - real_name: varchar, NULL - 암호화된 회원 실명
 - phone: varchar, NULL - 암호화된 회원 연락처
+- zipcode: varchar(20), NULL - 회원 우편번호
+- road_address: varchar(500), NULL - 회원 도로명 주소
+- detail_address: varchar, NULL - 양방향 암호화된 회원 상세 주소
 
 ## t_user_roles
 회원별 권한
