@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm/relations";
-import { tCourses, tCourseSessions, tUser, tFiles, tEnrollments, tNotices, tTest1, tTest1Child, tInquiries, tFileLinks, tUserRoles, tInquiryReplies, tBanner } from "./schema.js";
+import { tCourses, tCourseSessions, tUser, tUserRegistermeta, tFiles, tEnrollments, tNotices, tTest1, tTest1Child, tInquiries, tFileLinks, tUserRoles, tInquiryReplies, tBanner } from "./schema.js";
 export const tCourseSessionsRelations = relations(tCourseSessions, ({ one, many }) => ({
     tCourse: one(tCourses, {
         fields: [tCourseSessions.courseId],
@@ -39,12 +39,19 @@ export const tUserRelations = relations(tUser, ({ many }) => ({
     }),
     tFiles: many(tFiles),
     tUserRoles: many(tUserRoles),
+    tUserRegistermeta: many(tUserRegistermeta),
     tInquiryReplies: many(tInquiryReplies),
     tBanners_createdBy: many(tBanner, {
         relationName: "tBanner_createdBy_tUser_id"
     }),
     tBanners_updatedBy: many(tBanner, {
         relationName: "tBanner_updatedBy_tUser_id"
+    }),
+}));
+export const tUserRegistermetaRelations = relations(tUserRegistermeta, ({ one }) => ({
+    tUser: one(tUser, {
+        fields: [tUserRegistermeta.userId],
+        references: [tUser.id]
     }),
 }));
 export const tFilesRelations = relations(tFiles, ({ one, many }) => ({

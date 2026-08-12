@@ -1,7 +1,8 @@
 import { Hono } from "hono";
+import { getConnInfo } from "@hono/node-server/conninfo";
 import { and, desc, eq, ilike, ne, or, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { tCourseSessions, tCourses, tEnrollments, tUser, tUserRoles, } from "../db/schema.js";
+import { tCourseSessions, tCourses, tEnrollments, tUser, tUserRegistermeta, tUserRoles, } from "../db/schema.js";
 import { createUserToken, createTemporaryPassword, encryptPersonalData, hashPassword, isAdminUser, isStaffOrAdminUser, sendPasswordResetEmail, toSafeUser, verifyPassword, verifyUserToken, withUserRoles, } from "../utils/auth_utils.js";
 const router = new Hono();
 const MODULE_NAME = "user_router";
@@ -12,6 +13,52 @@ const ok = (data = null, message = "") => ({
     msg: message,
 });
 const getApiName = (c) => `${c.req.method} ${new URL(c.req.url).pathname}`;
+const normalizeSignupIp = (value) => {
+    let ip = value?.trim().replace(/^"|"$/g, "");
+    if (!ip || ip.toLowerCase() === "unknown" || ip.toLowerCase() === "null") {
+        return null;
+    }
+    if (ip.startsWith("[")) {
+        ip = ip.slice(1, ip.indexOf("]") > 0 ? ip.indexOf("]") : undefined);
+    }
+    else if (/^\d{1,3}(?:\.\d{1,3}){3}:\d+$/.test(ip)) {
+        ip = ip.slice(0, ip.lastIndexOf(":"));
+    }
+    if (ip.toLowerCase().startsWith("::ffff:")) {
+        ip = ip.slice(7);
+    }
+    return ip.slice(0, 45) || null;
+};
+const getSignupIp = (c) => {
+    const forwardedFor = c.req.header("x-forwarded-for")?.split(",")[0];
+    const forwarded = c.req
+        .header("forwarded")
+        ?.split(",")[0]
+        ?.split(";")
+        .find((part) => part.trim().toLowerCase().startsWith("for="))
+        ?.trim()
+        .slice(4);
+    const headerIp = [
+        c.req.header("cf-connecting-ip"),
+        c.req.header("true-client-ip"),
+        forwardedFor,
+        c.req.header("x-real-ip"),
+        c.req.header("fly-client-ip"),
+        forwarded,
+    ]
+        .map(normalizeSignupIp)
+        .find((ip) => ip !== null);
+    if (headerIp) {
+        return headerIp;
+    }
+    try {
+        return normalizeSignupIp(getConnInfo(c).remote.address);
+    }
+    catch {
+        return null;
+    }
+};
+const getSignupUserAgent = (c) => c.req.header("user-agent")?.trim() || null;
 const fail = (c, error) => ({
     success: false,
     data: null,
@@ -138,6 +185,8 @@ router.post("/register", async (c) => {
         const zipcode = readOptionalString(input, ["zipcode", "zipCode", "zip_code"]);
         const roadAddress = readOptionalString(input, ["roadAddress", "road_address"]);
         const detailAddress = readOptionalString(input, ["detailAddress", "detail_address"]);
+        const signupIp = getSignupIp(c);
+        const signupUserAgent = getSignupUserAgent(c);
         if (!email) {
             return c.json(fail(c, new Error("email is required")));
         }
@@ -183,6 +232,11 @@ router.post("/register", async (c) => {
             await tx.insert(tUserRoles).values({
                 userId: user.id,
                 roleName: "user",
+            });
+            await tx.insert(tUserRegistermeta).values({
+                userId: user.id,
+                signupIp,
+                signupUserAgent,
             });
             return user;
         });
@@ -578,6 +632,82 @@ router.get("/me", async (c) => {
     try {
         const user = await verifyUserToken(c.req.header("authorization") ?? "");
         return c.json(ok(toSafeUser(user)));
+    }
+    catch (error) {
+        return c.json(fail(c, error));
+    }
+});
+router.patch("/me", async (c) => {
+    try {
+        const user = await verifyUserToken(c.req.header("authorization") ?? "");
+        const input = await readJson(c);
+        const realName = readOptionalString(input, ["realName", "real_name"]);
+        const phone = readOptionalString(input, ["phone"]);
+        const zipcode = readOptionalString(input, ["zipcode"]);
+        const roadAddress = readOptionalString(input, ["roadAddress", "road_address"]);
+        const detailAddress = readOptionalString(input, ["detailAddress", "detail_address"]);
+        if (realName !== undefined && !realName) {
+            throw new Error("real name is required");
+        }
+        if (phone !== undefined && !phone) {
+            throw new Error("phone is required");
+        }
+        const values = {
+            ...(realName !== undefined ? { realName: encryptPersonalData(realName) } : {}),
+            ...(phone !== undefined ? { phone: encryptPersonalData(phone) } : {}),
+            ...(zipcode !== undefined ? { zipcode } : {}),
+            ...(roadAddress !== undefined ? { roadAddress } : {}),
+            ...(detailAddress !== undefined
+                ? { detailAddress: encryptPersonalData(detailAddress) }
+                : {}),
+            updatedAt: new Date().toISOString(),
+        };
+        const rows = await db
+            .update(tUser)
+            .set(values)
+            .where(eq(tUser.id, user.id))
+            .returning();
+        const updatedUser = rows[0];
+        if (!updatedUser) {
+            throw new Error("user not found");
+        }
+        return c.json(ok(toSafeUser(await withUserRoles(updatedUser)), "profile updated"));
+    }
+    catch (error) {
+        return c.json(fail(c, error));
+    }
+});
+router.get("/me/enrollments", async (c) => {
+    try {
+        const user = await verifyUserToken(c.req.header("authorization") ?? "");
+        const rows = await db
+            .select({
+            enrollment: tEnrollments,
+            course: tCourses,
+            session: tCourseSessions,
+        })
+            .from(tEnrollments)
+            .innerJoin(tCourses, eq(tCourses.id, tEnrollments.courseId))
+            .innerJoin(tCourseSessions, eq(tCourseSessions.id, tEnrollments.sessionId))
+            .where(eq(tEnrollments.userId, user.id))
+            .orderBy(desc(tEnrollments.appliedAt), desc(tEnrollments.id));
+        return c.json(ok(rows.map(({ enrollment, course, session }) => ({
+            ...enrollment,
+            statusLabel: toEnrollmentStatusLabel(enrollment.status),
+            course: {
+                id: course.id,
+                courseName: course.courseName,
+            },
+            session: {
+                id: session.id,
+                sessionName: session.sessionName,
+                sessionNo: session.sessionNo,
+                startDate: session.startDate,
+                endDate: session.endDate,
+                classStartTime: session.classStartTime,
+                classEndTime: session.classEndTime,
+            },
+        }))));
     }
     catch (error) {
         return c.json(fail(c, error));

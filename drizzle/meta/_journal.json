@@ -148,6 +148,20 @@
       "when": 1787049000000,
       "tag": "0020_user_address",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1787135400000,
+      "tag": "0021_user_registermeta",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1787136000000,
+      "tag": "0022_all_foreign_keys_cascade",
+      "breakpoints": true
     }
   ]
 }

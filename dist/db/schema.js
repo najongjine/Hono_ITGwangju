@@ -21,7 +21,7 @@ export const tCourseSessions = pgTable("t_course_sessions", {
         columns: [table.courseId],
         foreignColumns: [tCourses.id],
         name: "t_course_sessions_course_id_fkey"
-    }).onDelete("cascade"),
+    }).onUpdate("cascade").onDelete("cascade"),
 ]);
 /** 교육 과정 기본 정보. status: 모집중 | 운영중 | 마감 | deleted */
 export const tCourses = pgTable("t_courses", {
@@ -39,21 +39,24 @@ export const tCourses = pgTable("t_courses", {
     updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
 }, (table) => [
     index("idx_t_courses_visible_status").on(table.isVisible, table.status),
+    index("idx_t_courses_created_by").on(table.createdBy),
+    index("idx_t_courses_thumbnail_file_id").on(table.thumbnailFileId),
+    index("idx_t_courses_updated_by").on(table.updatedBy),
     foreignKey({
         columns: [table.createdBy],
         foreignColumns: [tUser.id],
         name: "t_courses_created_by_fkey"
-    }).onDelete("set null"),
+    }).onUpdate("cascade").onDelete("cascade"),
     foreignKey({
         columns: [table.thumbnailFileId],
         foreignColumns: [tFiles.id],
         name: "t_courses_thumbnail_file_id_fkey"
-    }).onDelete("set null"),
+    }).onUpdate("cascade").onDelete("cascade"),
     foreignKey({
         columns: [table.updatedBy],
         foreignColumns: [tUser.id],
         name: "t_courses_updated_by_fkey"
-    }).onDelete("set null"),
+    }).onUpdate("cascade").onDelete("cascade"),
 ]);
 /** 로그인 계정과 회원 연락처. status: active | inactive */
 export const tUser = pgTable("t_user", {
@@ -77,6 +80,21 @@ export const tUser = pgTable("t_user", {
     unique("t_user_provider_user_id_uk").on(table.provider, table.providerUserId),
     unique("t_user_email_uk").on(table.email),
 ]);
+/** 회원가입 요청 메타데이터 */
+export const tUserRegistermeta = pgTable("t_user_registermeta", {
+    id: serial().primaryKey().notNull(),
+    signupIp: varchar("signup_ip", { length: 45 }),
+    signupUserAgent: text("signup_user_agent"),
+    createdDt: timestamp("created_dt", { withTimezone: true, mode: 'string' }).defaultNow(),
+    userId: integer("user_id"),
+}, (table) => [
+    index("idx_t_user_registermeta_user_id").on(table.userId),
+    foreignKey({
+        columns: [table.userId],
+        foreignColumns: [tUser.id],
+        name: "t_user_registermeta_user_id_fkey"
+    }).onUpdate("cascade").onDelete("cascade"),
+]);
 /** 회원의 과정 회차 신청. status: pending | approved | rejected */
 export const tEnrollments = pgTable("t_enrollments", {
     id: serial().primaryKey().notNull(),
@@ -90,22 +108,23 @@ export const tEnrollments = pgTable("t_enrollments", {
     updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
 }, (table) => [
     index("idx_t_enrollments_course_session").using("btree", table.courseId.asc().nullsLast().op("int4_ops"), table.sessionId.asc().nullsLast().op("int4_ops")),
+    index("idx_t_enrollments_session_id").on(table.sessionId),
     index("idx_t_enrollments_user_id").using("btree", table.userId.asc().nullsLast().op("int4_ops")),
     foreignKey({
         columns: [table.courseId],
         foreignColumns: [tCourses.id],
         name: "t_enrollments_course_id_fkey"
-    }).onDelete("cascade"),
+    }).onUpdate("cascade").onDelete("cascade"),
     foreignKey({
         columns: [table.sessionId],
         foreignColumns: [tCourseSessions.id],
         name: "t_enrollments_session_id_fkey"
-    }).onDelete("cascade"),
+    }).onUpdate("cascade").onDelete("cascade"),
     foreignKey({
         columns: [table.userId],
         foreignColumns: [tUser.id],
         name: "t_enrollments_user_id_fkey"
-    }).onDelete("restrict"),
+    }).onUpdate("cascade").onDelete("cascade"),
     unique("t_enrollments_user_session_uk").on(table.userId, table.sessionId),
 ]);
 /** 학원 공지사항. status: published | hidden */
@@ -122,11 +141,12 @@ export const tNotices = pgTable("t_notices", {
     updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
 }, (table) => [
     index("idx_t_notices_status_pinned").on(table.status, table.isPinned, table.createdAt),
+    index("idx_t_notices_user_id").on(table.userId),
     foreignKey({
         columns: [table.userId],
         foreignColumns: [tUser.id],
         name: "t_notices_user_id_fkey"
-    }).onDelete("set null"),
+    }).onUpdate("cascade").onDelete("cascade"),
 ]);
 /** 개발용 테스트 부모 데이터 */
 export const tTest1 = pgTable("t_test1", {
@@ -142,6 +162,7 @@ export const tTest1Child = pgTable("t_test1_child", {
     createdDt: timestamp("created_dt", { withTimezone: true, mode: 'string' }).defaultNow(),
     test1Id: integer("test1_id"),
 }, (table) => [
+    index("idx_t_test1_child_test1_id").on(table.test1Id),
     foreignKey({
         columns: [table.test1Id],
         foreignColumns: [tTest1.id],
@@ -157,11 +178,12 @@ export const tInquiries = pgTable("t_inquiries", {
     createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
     updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
 }, (table) => [
+    index("idx_t_inquiries_user_id").on(table.userId),
     foreignKey({
         columns: [table.userId],
         foreignColumns: [tUser.id],
         name: "t_inquiries_user_id_fkey"
-    }).onDelete("restrict"),
+    }).onUpdate("cascade").onDelete("cascade"),
 ]);
 /** 업로드 파일 메타데이터. storage_type: local | cloudinary, status: active | deleted */
 export const tFiles = pgTable("t_files", {
@@ -182,11 +204,12 @@ export const tFiles = pgTable("t_files", {
     status: varchar().default('active').notNull(),
 }, (table) => [
     index("idx_t_files_storage_type").using("btree", table.storageType.asc().nullsLast().op("text_ops")),
+    index("idx_t_files_uploaded_by").on(table.uploadedBy),
     foreignKey({
         columns: [table.uploadedBy],
         foreignColumns: [tUser.id],
         name: "t_files_uploaded_by_fkey"
-    }).onDelete("set null"),
+    }).onUpdate("cascade").onDelete("cascade"),
 ]);
 /** 파일과 과정·공지 등 업무 데이터의 연결 */
 export const tFileLinks = pgTable("t_file_links", {
@@ -205,7 +228,7 @@ export const tFileLinks = pgTable("t_file_links", {
         columns: [table.fileId],
         foreignColumns: [tFiles.id],
         name: "t_file_links_file_id_fkey"
-    }).onDelete("cascade"),
+    }).onUpdate("cascade").onDelete("cascade"),
     unique("t_file_links_target_uk").on(table.fileId, table.targetTable, table.targetId, table.fileRole),
 ]);
 /** 회원 권한. role_name: user | staff | admin */
@@ -215,11 +238,12 @@ export const tUserRoles = pgTable("t_user_roles", {
     roleName: varchar("role_name", { length: 250 }),
     createdAt: timestamp("created_at", { mode: 'string' }).default(sql `CURRENT_TIMESTAMP`),
 }, (table) => [
+    index("idx_t_user_roles_user_id").on(table.userId),
     foreignKey({
         columns: [table.userId],
         foreignColumns: [tUser.id],
         name: "fk_user_roles_user"
-    }).onDelete("cascade"),
+    }).onUpdate("cascade").onDelete("cascade"),
 ]);
 /** 문의에 작성된 사용자·직원 답글 */
 export const tInquiryReplies = pgTable("t_inquiry_replies", {
@@ -231,16 +255,17 @@ export const tInquiryReplies = pgTable("t_inquiry_replies", {
     updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
 }, (table) => [
     index("idx_t_inquiry_replies_inquiry_id").using("btree", table.inquiryId.asc().nullsLast().op("int4_ops")),
+    index("idx_t_inquiry_replies_user_id").on(table.userId),
     foreignKey({
         columns: [table.inquiryId],
         foreignColumns: [tInquiries.id],
         name: "t_inquiry_replies_inquiry_id_fkey"
-    }).onDelete("cascade"),
+    }).onUpdate("cascade").onDelete("cascade"),
     foreignKey({
         columns: [table.userId],
         foreignColumns: [tUser.id],
         name: "t_inquiry_replies_user_id_fkey"
-    }).onDelete("set null"),
+    }).onUpdate("cascade").onDelete("cascade"),
 ]);
 /** 홈페이지 노출 배너. status: active | deleted */
 export const tBanner = pgTable("t_banner", {
@@ -264,19 +289,22 @@ export const tBanner = pgTable("t_banner", {
 }, (table) => [
     index("idx_t_banner_position_visible").on(table.position, table.isVisible, table.status),
     index("idx_t_banner_sort_order").using("btree", table.sortOrder.asc().nullsLast().op("int4_ops"), table.createdAt.asc().nullsLast().op("timestamp_ops")),
+    index("idx_t_banner_created_by").on(table.createdBy),
+    index("idx_t_banner_image_file_id").on(table.imageFileId),
+    index("idx_t_banner_updated_by").on(table.updatedBy),
     foreignKey({
         columns: [table.createdBy],
         foreignColumns: [tUser.id],
         name: "t_banner_created_by_fkey"
-    }).onDelete("set null"),
+    }).onUpdate("cascade").onDelete("cascade"),
     foreignKey({
         columns: [table.imageFileId],
         foreignColumns: [tFiles.id],
         name: "t_banner_image_file_id_fkey"
-    }).onDelete("set null"),
+    }).onUpdate("cascade").onDelete("cascade"),
     foreignKey({
         columns: [table.updatedBy],
         foreignColumns: [tUser.id],
         name: "t_banner_updated_by_fkey"
-    }).onDelete("set null"),
+    }).onUpdate("cascade").onDelete("cascade"),
 ]);

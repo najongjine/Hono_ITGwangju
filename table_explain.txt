@@ -10,6 +10,8 @@
 
 ============================================================
 
+모든 FK는 ON DELETE CASCADE, ON UPDATE CASCADE를 사용한다.
+
 ## t_user
 로그인 계정과 회원 기본정보
 
@@ -29,6 +31,14 @@
 - zipcode: varchar(20), NULL - 회원 우편번호
 - road_address: varchar(500), NULL - 회원 도로명 주소
 - detail_address: varchar, NULL - 양방향 암호화된 회원 상세 주소
+
+## t_user_registermeta
+회원가입 요청 메타데이터
+- id: serial, PK, NOT NULL - 회원가입 메타데이터 식별자
+- signup_ip: varchar(45), NULL - 회원가입 요청 IP
+- signup_user_agent: text, NULL - 회원가입 요청 User-Agent
+- created_dt: timestamptz, NULL, DEFAULT now() - 생성 시각
+- user_id: integer, NULL, FK -> t_user.id - 가입한 회원
 
 ## t_user_roles
 회원별 권한
